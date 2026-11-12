@@ -1,0 +1,3 @@
+# blocs d'altitude téléchargés par outils/preparer_mnt.py (se retéléchargent, inutile de les publier)
+outils/cache_mnt/
+__pycache__/

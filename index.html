@@ -15,7 +15,13 @@ html,body{margin:0;height:100%;font-family:Calibri,"Segoe UI",system-ui,sans-ser
 #app{display:flex;height:100vh}
 aside{width:320px;flex:0 0 320px;overflow-y:auto;border-right:1px solid var(--bord);background:var(--fond)}
 main{flex:1 1 auto;display:flex;flex-direction:column;min-width:0}
-#carte{flex:1 1 auto;height:0;position:relative}
+#zone{flex:1 1 auto;height:0;position:relative}
+#carte,#carte3d{position:absolute;inset:0}
+#carte3d{display:none;background:#cfe3f1}
+#btVue{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1001;padding:6px 16px;font-size:13.5px;font-weight:700;box-shadow:0 1px 5px rgba(0,0,0,.3)}
+#bandeau3d{display:none;position:absolute;left:10px;bottom:34px;z-index:1001;max-width:380px;background:rgba(255,255,255,.95);border-left:4px solid var(--rouge);border-radius:4px;padding:8px 10px;font-size:12px;line-height:1.35;box-shadow:0 1px 5px rgba(0,0,0,.3)}
+#bandeau3d .ligne{font-size:12px;margin:6px 0 0}
+.maplibregl-popup-content{font-family:inherit}
 header{padding:14px 16px 12px;border-left:5px solid var(--rouge);background:#fff;border-bottom:1px solid var(--bord)}
 .retour{display:inline-block;margin:0 0 6px;font-size:12.5px;color:#6b7078;text-decoration:none}.retour:hover{color:#B91E27;text-decoration:underline}
 .eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--rouge);font-weight:700}
@@ -147,7 +153,15 @@ details summary{cursor:pointer;font-size:13px;font-weight:600}
  </details></section>
  <section><details><summary>Méthode, calage et sources</summary><div class="note" id="methode"></div></details></section>
 </aside>
-<main><div id="carte"><div id="chargement">Préparation de la carte…</div></div>
+<main><div id="zone"><div id="carte"></div><div id="carte3d"></div>
+  <button id="btVue" title="Passer de la carte à plat à la vue en relief, et inversement. Les résultats sont les mêmes.">Vue 3D</button>
+  <div id="bandeau3d"><b>Vue 3D : une représentation cartographique, pas une simulation.</b>
+   Les couleurs de submersion calculées par le modèle (cellules de 10 m) sont posées sur le relief. Aucune surface d'eau
+   n'est simulée. Les chiffres sont exactement ceux de la vue 2D.
+   <div class="ligne" id="reglages3d">Relief exagéré × <b id="vExag">4</b> <input type="range" id="exag" min="1" max="10" value="4" style="width:100px">
+    Fond <select id="fond3d"><option value="plan">Plan IGN</option><option value="ortho">Satellite</option></select></div>
+   <div class="note" id="noteRelief">Relief : MNT LiDAR HD de l'IGN, utilisé pour l'affichage seulement. Le modèle garde ses propres altitudes.</div></div>
+  <div id="chargement">Préparation de la carte…</div></div>
  <div id="tableau"><table id="tab"></table></div>
  <div id="barre"><span id="bInfo" class="stat">Cliquez sur la carte pour connaître l'altitude, le seuil d'inondation et le classement PPRL d'un point.</span></div>
 </main></div>
@@ -196,6 +210,22 @@ function coefs(L){
 }
 const idxNiv = v => Math.max(0, Math.min(NL-1, Math.round((v-NIV[0])/PAS)));
 const idxStat = L => { let j = 0; while (j < NS && NIVS[j] <= L+1e-6) j++; return j; };   // nombre de niveaux statiques <= L
+// numéro de la cellule de grille contenant un point (latitude, longitude), ou -1 hors grille.
+// Formule de la projection Web Mercator, écrite ici pour ne dépendre d'aucune bibliothèque de carte (2D ou 3D).
+const RAYON = 6378137;
+function celluleDe(lat, lon){
+  const x = RAYON*lon*Math.PI/180, y = RAYON*Math.log(Math.tan(Math.PI/4 + lat*Math.PI/360));
+  const col = Math.floor((x-G.x0)/G.px), lig = Math.floor((G.y1-y)/G.px);
+  return (col<0||col>=NX||lig<0||lig>=NY) ? -1 : lig*NX+col;
+}
+
+// =====================================================================================================
+// ORGANISATION DU CODE
+//  - CALCUL  : fonctions qui lisent les grilles du modèle et produisent une image et des chiffres.
+//              Elles n'utilisent jamais la carte : calculer(), calculerBatiments(), infoPoint(), empreinte().
+//  - VUE 2D  : tout ce qui utilise Leaflet (objet « L » et variable « carte »). Elle ne fait qu'afficher.
+//  Une future vue 3D affichera la même image et les mêmes chiffres : les résultats ne dépendent pas de la vue.
+// =====================================================================================================
 
 // ---------- carte et fonds ----------
 const carte = L.map("carte", {zoomControl:true, preferCanvas:true, maxZoom:20});
@@ -228,13 +258,16 @@ const CanvasOverlay = L.ImageOverlay.extend({
   }
 });
 const rgba = (r,g,b,a) => ((a<<24)|(b<<16)|(g<<8)|r)>>>0;
-function calqueCanvas(opacite){
+// CALCUL : une image de la taille de la grille (1 pixel = 1 cellule), partagée par toutes les vues
+function creerImage(){
   const cv = document.createElement("canvas"); cv.width = NX; cv.height = NY;
   const ctx = cv.getContext("2d"), img = ctx.createImageData(NX, NY);
-  return {cv, ctx, img, px:new Uint32Array(img.data.buffer),
-          couche:new CanvasOverlay(cv, bornes, {className:"grille", opacity:opacite, interactive:false})};
+  return {cv, ctx, img, px:new Uint32Array(img.data.buffer)};
 }
-const eau = calqueCanvas(.8); eau.couche.addTo(carte);
+// VUE 2D : pose une image sur la carte Leaflet
+const poserImage = (image, opacite) => new CanvasOverlay(image.cv, bornes, {className:"grille", opacity:opacite, interactive:false});
+const eau = creerImage();
+const coucheEau = poserImage(eau, .8).addTo(carte);
 const PX = eau.px;
 const COUL = {p1:rgba(158,202,225,255), p2:rgba(66,146,198,255), p3:rgba(33,102,172,255), p4:rgba(8,48,107,255),
               hach:rgba(214,233,246,255), bas:rgba(244,162,89,230), mer:rgba(184,224,245,255)};
@@ -256,14 +289,16 @@ for (let t=1; t<=NL; t++) hbHors[t] += hbHors[t-1];
 for (let w=1; w<=NS; w++) hbStat[w] += hbStat[w-1];
 const somme = (h, t) => { let s=0; for (let c=1;c<=NC;c++) s+=h[c*LG+t]; return s; };
 
-// ---------- état ----------
+// ---------- état (commun à toutes les vues) ----------
 const curseur = document.getElementById("curseur");
 curseur.max = NL-1;
-let idx = idxNiv(L20), evt = 4.9, elev = 0.2;
-let basHa = 0, basParCom = new Float64Array(NC+1), batFort = 0;
+let idx = idxNiv(L20), evt = 4.9, elev = 0.2;           // niveau marin choisi (rang dans NIV), événement, élévation
+let basHa = 0, basParCom = new Float64Array(NC+1), batFort = 0;   // résultats du dernier calcul
+const etatBat = new Uint8Array(NB);                     // par bâtiment : 0 hors d'eau, 1 touché, 2 plus d'1 m d'eau, 3 sous le niveau marin non atteint
 const opt = id => document.getElementById(id).checked;
 
-function dessiner(){
+// ---------- CALCUL : image des hauteurs d'eau et indicateurs pour le niveau choisi ----------
+function calculer(){
   const t = idx+1, Lm = NIV[idx], lc = zcode(Lm), [ca, cb] = coefs(Lm);
   const terr = opt("oTerr"), aBas = opt("oBas"), aMer = opt("oMer"), aEau = opt("oEau");
   basParCom.fill(0);
@@ -282,7 +317,24 @@ function dessiner(){
   }
   eau.ctx.putImageData(eau.img, 0, 0);
   basHa = 0; for (let c=1;c<=NC;c++) basHa += basParCom[c]*AIRE_HA;
+  calculerBatiments();
+}
+function calculerBatiments(){
+  const t = idx+1, Lm = NIV[idx], lc = zcode(Lm), [ca, cb] = coefs(Lm);
+  batFort = 0;
+  for (let j=0;j<NB;j++){
+    const i = B.cell[j], tt = T[i], z = Z[i];
+    if (tt>=1 && tt<=t){
+      const fort = lc - z - ca*P20[i] - cb*P60[i] >= 100;
+      etatBat[j] = fort ? 2 : 1; if (fort) batFort++;
+    } else etatBat[j] = (z>0 && z<lc) ? 3 : 0;
+  }
+}
+// enchaînement complet : un calcul, puis la mise à jour de la carte et des chiffres affichés
+function dessiner(){
+  calculer();
   majBatiments(); majTexte(); majCourbe(); if (tableauVisible) remplirTableau();
+  rafraichir3D();
 }
 let attente = false;
 const planifier = () => { if (!attente){ attente = true; requestAnimationFrame(()=>{ attente=false; dessiner(); }); } };
@@ -331,18 +383,16 @@ function infoBat(j){
     <tr><td>Zonage PPRL</td><td>${NOM_ZONE[kZone(k)]}</td></tr></table>
     <div class="note">${NOM_MODE[kMode(k)]}</div></div>`;
 }
+const COUL_BAT = ["", "#B91E27", "#5c0a10", "#f4a259"];   // couleur selon etatBat
+// VUE 2D : affiche les bâtiments d'après etatBat (rempli par calculerBatiments), sans rien recalculer
 function majBatiments(){
-  coucheBat.clearLayers(); batFort = 0;
-  if (!D.bat) return;
-  const t = idx+1, Lm = NIV[idx], lc = zcode(Lm), [ca, cb] = coefs(Lm), aBat = opt("oBat"), aBas = opt("oBas");
+  coucheBat.clearLayers();
+  if (!D.bat || !opt("oBat")) return;
+  const aBas = opt("oBas");
   for (let j=0;j<NB;j++){
-    const i = B.cell[j], tt = T[i], z = Z[i];
-    const touche = tt>=1 && tt<=t, bas = !touche && z>0 && z<lc;
-    let fort = false;
-    if (touche){ fort = lc - z - ca*P20[i] - cb*P60[i] >= 100; if (fort) batFort++; }
-    if (!aBat || (!touche && !(bas && aBas))) continue;
-    L.circleMarker([B.lat[j],B.lon[j]], {radius:3, weight:.5, color:"#fff", fillOpacity:.9, j,
-      fillColor: touche ? (fort ? "#5c0a10" : "#B91E27") : "#f4a259"})
+    const e = etatBat[j];
+    if (!e || (e===3 && !aBas)) continue;
+    L.circleMarker([B.lat[j],B.lon[j]], {radius:3, weight:.5, color:"#fff", fillOpacity:.9, j, fillColor:COUL_BAT[e]})
      .bindPopup(l => infoBat(l.options.j), {maxWidth:300}).addTo(coucheBat);
   }
 }
@@ -353,17 +403,17 @@ const boitesCom = {};
 coucheCom.eachLayer(l => boitesCom[l.feature.properties.i] = l.getBounds());
 
 // ---------- couches du PPRL ----------
-const pprl = calqueCanvas(.65);
+const pprl = creerImage(), couchePprl = poserImage(pprl, .65);
 const PAL_ALEA = [0, rgba(255,224,138,255), rgba(253,174,97,255), rgba(227,74,51,255), rgba(122,1,119,255)];
 const PAL_ZONE = [0, rgba(215,25,28,255), rgba(245,138,31,255), rgba(241,224,90,255), rgba(43,108,176,255), rgba(127,179,230,255), rgba(90,174,97,255)];
 const hex = c => "#" + [c&255, (c>>8)&255, (c>>16)&255].map(v => v.toString(16).padStart(2,"0")).join("");
 function majPprl(){
   const m = +document.getElementById("sPprl").value, leg = document.getElementById("legPprl");
-  if (!m){ carte.removeLayer(pprl.couche); leg.innerHTML = ""; return; }
+  if (!m){ carte.removeLayer(couchePprl); leg.innerHTML = ""; return; }
   const px = pprl.px;
   for (let i=0;i<N;i++){ const k = K[i]; px[i] = m===1 ? PAL_ALEA[k&7] : m===2 ? PAL_ALEA[(k>>3)&7] : PAL_ZONE[(k>>6)&7]; }
   pprl.ctx.putImageData(pprl.img, 0, 0);
-  pprl.couche.addTo(carte);
+  couchePprl.addTo(carte);
   const noms = m===3 ? NOM_ZONE : NOM_ALEA, pal = m===3 ? PAL_ZONE : PAL_ALEA;
   leg.innerHTML = `<div class="note" style="margin:6px 0 2px">${m===3 ? "Zonage réglementaire du PPRL" : "Aléa de submersion du PPRL (hauteur et vitesse)"}</div>` +
     pal.map((c,k) => k ? `<div class="leg"><i style="background:${hex(c)}"></i>${noms[k]}</div>` : "").join("") +
@@ -399,12 +449,11 @@ function sparkline(serie){
 });
 bascule("oPiezo", couchePiezo);
 
-// ---------- clic sur la carte ----------
-carte.on("click", e => {
-  const p = L.CRS.EPSG3857.project(e.latlng);
-  const col = Math.floor((p.x-G.x0)/G.px), lig = Math.floor((G.y1-p.y)/G.px);
-  if (col<0||col>=NX||lig<0||lig>=NY) return;
-  const i = lig*NX+col, t = T[i], w = W[i], z = Z[i], c = C[i], k = K[i], com = c ? D.communes[c-1] : null;
+// ---------- CALCUL : informations en un point (texte de la bulle et de la barre du bas) ----------
+function infoPoint(lat, lon){
+  const i = celluleDe(lat, lon);
+  if (i < 0) return null;
+  const t = T[i], w = W[i], z = Z[i], c = C[i], k = K[i], com = c ? D.communes[c-1] : null;
   const Lm = NIV[idx], [ca, cb] = coefs(Lm);
   let txt, court;
   if (t===0) txt = court = "Zone détectée comme mer (ou sans donnée de relief).";
@@ -427,8 +476,14 @@ carte.on("click", e => {
     if (l.length) cn += "<ul>"+l.map(a=>`<li>${a.debut?a.debut.slice(0,10):"?"} – ${a.lib}</li>`).join("")+"</ul>";
     cn += "</div>";
   }
-  L.popup({maxWidth:340}).setLatLng(e.latlng).setContent(`<div class="pop">${txt}${cn}</div>`).openOn(carte);
-  document.getElementById("bInfo").textContent = court;
+  return {html:`<div class="pop">${txt}${cn}</div>`, court};
+}
+// VUE 2D : clic sur la carte
+carte.on("click", e => {
+  const info = infoPoint(e.latlng.lat, e.latlng.lng);
+  if (!info) return;
+  L.popup({maxWidth:340}).setLatLng(e.latlng).setContent(info.html).openOn(carte);
+  document.getElementById("bInfo").textContent = info.court;
 });
 
 // ---------- courbe d'exposition ----------
@@ -471,11 +526,11 @@ function remplirTableau(){
   tb.innerHTML = "<tr>"+tetes.map((h,j)=>`<th data-j="${j}">${h}${j===triCol?(triDesc?" ▼":" ▲"):""}</th>`).join("")+"</tr>"+
     L_.map(r=>`<tr data-n="${r[8]}"><td>${r[0]}</td><td>${fr(r[1])}</td><td>${fr(r[2],1)}</td><td>${fr(r[3],1)} %</td><td>${fr(r[4])}</td><td>${fr(r[5])}</td><td>${fr(r[6],1)}</td><td>${r[7]}</td></tr>`).join("");
   tb.querySelectorAll("th").forEach(th => th.onclick = () => { const j=+th.dataset.j; triDesc = j===triCol ? !triDesc : j!==0; triCol=j; remplirTableau(); });
-  tb.querySelectorAll("tr[data-n]").forEach(tr => tr.onclick = () => { const b=boitesCom[+tr.dataset.n]; if (b) carte.fitBounds(b); });
+  tb.querySelectorAll("tr[data-n]").forEach(tr => tr.onclick = () => { const b=boitesCom[+tr.dataset.n]; if (b) cadrer(b); });
 }
 document.getElementById("btTab").onclick = () => { tableauVisible = !tableauVisible;
   document.getElementById("tableau").style.display = tableauVisible ? "block" : "none";
-  if (tableauVisible) remplirTableau(); setTimeout(()=>carte.invalidateSize(), 50); };
+  if (tableauVisible) remplirTableau(); setTimeout(()=>{ carte.invalidateSize(); if (carte3d) carte3d.resize(); }, 50); };
 
 // ---------- export CSV ----------
 document.getElementById("btCsv").onclick = () => {
@@ -498,7 +553,101 @@ document.querySelectorAll("#evts button").forEach(b => b.onclick = () => { evt =
 document.querySelectorAll("#elevs button").forEach(b => b.onclick = () => { elev = +b.dataset.v; idx = idxNiv(evt+elev); planifier(); });
 ["oBas","oTerr","oMer","oBat","oEau"].forEach(id => document.getElementById(id).onchange = planifier);
 bascule("oCom", coucheCom);
-document.getElementById("opa").oninput = e => eau.couche.setOpacity(e.target.value/100);
+document.getElementById("opa").oninput = e => { coucheEau.setOpacity(e.target.value/100);
+  if (carte3d) carte3d.setPaintProperty("eau", "raster-opacity", e.target.value/100); };
+
+// =====================================================================================================
+// VUE 3D (MapLibre GL JS)
+// Elle n'effectue aucun calcul. Elle affiche l'image « eau » (exactement le même objet que la vue 2D)
+// posée sur un relief. Le relief (tuiles/mnt, MNT LiDAR HD) ne sert qu'à l'affichage : le modèle ne le lit pas.
+// La carte 3D n'est créée qu'au premier clic sur le bouton, pour ne pas ralentir l'ouverture de la page.
+// =====================================================================================================
+let carte3d = null, vue = "2D", exag = 4, reliefDispo = false;
+const elCarte = document.getElementById("carte"), elCarte3d = document.getElementById("carte3d");
+const [[SUD, OUEST], [NORD, EST]] = D.bounds;
+const COINS = [[OUEST,NORD],[EST,NORD],[EST,SUD],[OUEST,SUD]];      // coins de la grille : haut gauche, haut droit, bas droit, bas gauche
+const tuilesIgn = (couche, format) => "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=" + couche +
+  "&STYLE=normal&FORMAT=image%2F" + format + "&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}";
+
+async function creerCarte3d(centre, zoom){
+  // fiche d'identité du relief, écrite par outils/preparer_mnt.py ; sans elle, la vue 3D reste à plat
+  let mnt = null;
+  try { const r = await fetch("tuiles/mnt/mnt.json"); if (r.ok) mnt = await r.json(); } catch(e){}
+  reliefDispo = !!mnt;
+  const sources = {
+    plan:  {type:"raster", tiles:[tuilesIgn("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2","png")], tileSize:256, maxzoom:18, attribution:"© IGN / Géoplateforme"},
+    ortho: {type:"raster", tiles:[tuilesIgn("ORTHOIMAGERY.ORTHOPHOTOS","jpeg")], tileSize:256, maxzoom:19}};
+  const couches = [{id:"plan", type:"raster", source:"plan"}, {id:"ortho", type:"raster", source:"ortho", layout:{visibility:"none"}}];
+  if (mnt){
+    const dem = {type:"raster-dem", tiles:[new URL("tuiles/mnt/", location.href).href + "{z}/{x}/{y}.png"], encoding:mnt.encodage,
+                 tileSize:mnt.tuile, minzoom:mnt.zmin, maxzoom:mnt.zmax, bounds:mnt.emprise, attribution:"Relief : MNT LiDAR HD © IGN"};
+    sources.relief = dem;                       // pour mettre le terrain en volume
+    sources.ombrage = Object.assign({}, dem);   // pour dessiner les ombres (MapLibre demande une source séparée)
+    couches.push({id:"ombrage", type:"hillshade", source:"ombrage", paint:{"hillshade-exaggeration":.3}});
+  } else {
+    document.getElementById("noteRelief").textContent = "Relief indisponible (dossier tuiles/mnt absent) : la vue reste à plat.";
+    document.getElementById("exag").disabled = true;
+  }
+  carte3d = new maplibregl.Map({container:"carte3d", style:{version:8, sources, layers:couches},
+    center:[centre.lng, centre.lat], zoom, pitch:55, bearing:-20, maxPitch:75, maxZoom:18});
+  carte3d.addControl(new maplibregl.NavigationControl({visualizePitch:true}), "top-left");
+  carte3d.addControl(new maplibregl.ScaleControl({unit:"metric"}));
+  await new Promise(pret => carte3d.once("load", pret));
+  if (mnt) carte3d.setTerrain({source:"relief", exaggeration:exag});
+  // l'image des hauteurs d'eau : le même canvas que la vue 2D, étiré entre les quatre coins de la grille
+  carte3d.addSource("eau", {type:"canvas", canvas:eau.cv, coordinates:COINS, animate:false});
+  carte3d.addLayer({id:"eau", type:"raster", source:"eau",
+    paint:{"raster-opacity":document.getElementById("opa").value/100, "raster-resampling":"nearest", "raster-fade-duration":0}});
+  carte3d.on("click", e => {
+    const info = infoPoint(e.lngLat.lat, e.lngLat.lng);
+    if (!info) return;
+    new maplibregl.Popup({maxWidth:"340px"}).setLngLat(e.lngLat).setHTML(info.html).addTo(carte3d);
+    document.getElementById("bInfo").textContent = info.court;
+  });
+}
+// demande à la carte 3D de relire l'image « eau » (après un changement de niveau marin ou d'option)
+function rafraichir3D(){
+  if (vue !== "3D" || !carte3d) return;
+  const s = carte3d.getSource("eau");
+  if (!s) return;
+  s.play(); s.pause();                                   // pause() recopie le contenu actuel du canvas dans la carte
+  // avec le relief, MapLibre garde en mémoire le terrain déjà « peint » : on lui demande de le repeindre
+  const t = carte3d.terrain;
+  if (t && t.sourceCache && t.sourceCache.freeRtt) t.sourceCache.freeRtt();
+  carte3d.triggerRepaint();
+}
+// passe d'une vue à l'autre en gardant le même endroit à l'écran ; l'état (niveau marin, options) n'est pas touché
+let basculeEnCours = false;
+async function basculerVue(){
+  if (basculeEnCours) return;
+  basculeEnCours = true;
+  try {
+    if (vue === "2D"){
+      const c = carte.getCenter(), z = carte.getZoom()-1;        // MapLibre compte les zooms avec 1 de moins que Leaflet
+      elCarte.style.display = "none"; elCarte3d.style.display = "block";
+      if (!carte3d){ document.getElementById("btVue").textContent = "Chargement de la vue 3D…"; await creerCarte3d(c, z); } else { carte3d.resize(); carte3d.jumpTo({center:[c.lng, c.lat], zoom:z}); }
+      vue = "3D"; rafraichir3D();
+    } else {
+      const c = carte3d.getCenter(), z = Math.round(carte3d.getZoom()+1);
+      elCarte3d.style.display = "none"; elCarte.style.display = "block";
+      carte.invalidateSize(); carte.setView([c.lat, c.lng], z, {animate:false});
+      vue = "2D";
+    }
+    document.getElementById("btVue").textContent = vue === "2D" ? "Vue 3D" : "Vue 2D";
+    document.getElementById("bandeau3d").style.display = vue === "3D" ? "block" : "none";
+  } finally { basculeEnCours = false; }
+}
+document.getElementById("btVue").onclick = basculerVue;
+document.getElementById("exag").oninput = e => { exag = +e.target.value; document.getElementById("vExag").textContent = exag;
+  if (carte3d && reliefDispo) carte3d.setTerrain({source:"relief", exaggeration:exag}); };
+document.getElementById("fond3d").onchange = e => { if (!carte3d) return;
+  carte3d.setLayoutProperty("plan", "visibility", e.target.value === "plan" ? "visible" : "none");
+  carte3d.setLayoutProperty("ortho", "visibility", e.target.value === "ortho" ? "visible" : "none"); };
+// cadre la vue active sur un rectangle (objet « bounds » de Leaflet)
+function cadrer(b){
+  if (vue === "3D") carte3d.fitBounds([[b.getWest(), b.getSouth()], [b.getEast(), b.getNorth()]], {padding:30});
+  else carte.fitBounds(b);
+}
 
 // ---------- couches WMS complémentaires ----------
 let wmsListe = []; const wmsCouches = {};
@@ -570,6 +719,42 @@ document.getElementById("methode").innerHTML = `
  BD TOPO® (IGN). <b>PPRL</b> : couches SIG de la DDTM du Calvados. <b>Nappes</b> : piézomètres Hub'Eau (ADES, BRGM).
  <b>Arrêtés CatNat</b> : base GASPAR (Géorisques).</p>
 <p>Outil v${D.version}, modèle construit le ${D.date} (outils/construire_modele.py), données de relief et d'enjeux extraites le ${D.date_donnees}.</p>`;
+
+// ---------- CALCUL : empreinte des résultats, pour vérifier qu'ils ne changent pas ----------
+// L'empreinte résume tous les résultats d'un niveau marin : les indicateurs et un « code de contrôle » de l'image
+// (un nombre qui change dès qu'un seul pixel change). Deux empreintes identiques = résultats identiques.
+function empreinte(){
+  const t = idx+1, Lm = NIV[idx];
+  let code = 2166136261>>>0, enCouleur = 0;
+  for (let i=0;i<N;i++){ code = Math.imul(code ^ PX[i], 16777619)>>>0; if (PX[i]) enCouleur++; }
+  const parEtat = [0,0,0,0]; for (let j=0;j<NB;j++) parEtat[etatBat[j]]++;
+  return {niveau:Lm, ha:somme(histo,t)*AIRE_HA, haHorsEmprise:horsHa[t]*AIRE_HA, batiments:somme(hb,t), batHorsEmprise:hbHors[t],
+    logements:somme(hl,t), batPlus1m:batFort, haSousNiveau:basHa, batStatique:hbStat[idxStat(Lm)], confiance:etatNiveau(Lm)[0],
+    batTouches:parEtat[1]+parEtat[2], batSousNiveau:parEtat[3], image:code.toString(16)+"/"+enCouleur};
+}
+// Outils de contrôle, à utiliser dans la console du navigateur (touche F12) :
+//   GEMAPI.verifier()  compare les résultats aux empreintes de référence (tests/empreintes_reference.json)
+//   GEMAPI.relever()   produit de nouvelles empreintes de référence (à faire après avoir reconstruit le modèle)
+const NIVEAUX_TEST = [3.0, 4.15, 4.2, 4.6, 5.1, 5.3, 5.5, 6.0, 7.0, 8.2];
+function relever(){
+  const avant = idx, liste = [];
+  for (const v of NIVEAUX_TEST){ idx = idxNiv(v); calculer(); liste.push(empreinte()); }
+  idx = avant; dessiner();
+  return {modele:D.date, options:["oEau","oBas","oTerr","oMer"].filter(opt), empreintes:liste};
+}
+async function verifier(){
+  const ref = await (await fetch("tests/empreintes_reference.json", {cache:"no-store"})).json(), act = relever(), ecarts = [];
+  if (ref.modele !== act.modele) ecarts.push(`modèle du ${act.modele}, référence établie pour celui du ${ref.modele}`);
+  if (ref.options.join() !== act.options.join()) ecarts.push("options d'affichage différentes de celles de la référence (" + ref.options.join(", ") + ")");
+  ref.empreintes.forEach((r,k) => { const a = act.empreintes[k];
+    for (const cle in r) if (r[cle] !== a[cle]) ecarts.push(`niveau ${r.niveau} m, ${cle} : ${a[cle]} au lieu de ${r[cle]}`); });
+  console.log(ecarts.length ? "ÉCARTS avec la référence :\n" + ecarts.join("\n") : "Résultats identiques à la référence (" + ref.empreintes.length + " niveaux marins).");
+  return {identique:!ecarts.length, ecarts};
+}
+window.GEMAPI = {empreinte, relever, verifier, basculerVue,
+  vue: () => vue,
+  // vrai si la vue 3D affiche bien le même objet image que la vue 2D (et non une copie qui pourrait diverger)
+  memeImage: () => !!carte3d && carte3d.getSource("eau").getCanvas() === eau.cv && coucheEau.getElement() === eau.cv};
 
 document.getElementById("chargement").remove();
 carte.invalidateSize();

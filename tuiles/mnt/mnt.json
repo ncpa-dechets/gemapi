@@ -1,0 +1,18 @@
+{
+ "source": "MNT LiDAR HD - IGN (Géoplateforme, couche IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.LAMB93)",
+ "licence": "Licence Ouverte Etalab 2.0",
+ "date": "12/11/2026",
+ "encodage": "terrarium",
+ "tuile": 512,
+ "zmin": 9,
+ "zmax": 14,
+ "emprise": [
+  -0.32107224134400286,
+  49.12772176265202,
+  0.09166124134400284,
+  49.34331714924442
+ ],
+ "pixel_m": 3.1,
+ "pas_altitude_m": 0.1,
+ "usage": "Affichage du relief en 3D uniquement. Le modèle de submersion utilise ses propres altitudes (RGE ALTI)."
+}
