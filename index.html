@@ -8,6 +8,9 @@
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- bâtiments 3D détaillés de la vue 3D : décompression des fichiers .glb, puis lecteur du dossier tuiles/batiments -->
+<script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
+<script src="batiments_detail.js"></script>
 <style>
 :root{--rouge:#B91E27;--vert:#B1B993;--txt:#1d2433;--mut:#5b6474;--bord:#e2e5ea;--fond:#f6f7f9}
 *{box-sizing:border-box}
@@ -162,9 +165,11 @@ details summary{cursor:pointer;font-size:13px;font-weight:600}
     talus que le modèle ne distingue pas, ou s'arrêter au pied d'un creux.</p>
     <div class="ligne" id="reglages3d">Relief et bâtiments exagérés × <b id="vExag">2</b> <input type="range" id="exag" min="1" max="10" value="2" style="width:100px">
      Fond <select id="fond3d"><option value="plan">Plan IGN</option><option value="ortho">Satellite</option></select></div>
-    <label class="cb" style="font-size:12px"><input type="checkbox" id="o3dVol" checked> Bâtiments en volume</label>
-    <div class="note" id="noteVol">Volumes : emprises et hauteurs de la BD TOPO. Un bâtiment est coloré quand son centre est dans une cellule
-     en eau ; son volume n'indique pas la hauteur d'eau dans le bâtiment. En gris : bâtiment hors d'eau au niveau choisi.</div>
+    <div class="ligne">Bâtiments <select id="s3dBat"><option value="detail">modèles détaillés (avec toits)</option>
+     <option value="volumes">volumes simples</option><option value="points">points</option></select></div>
+    <div class="note" id="noteVol">Modèles détaillés : bâtiments 3D issus du LiDAR, affichés en zoomant (sinon volumes simples de la BD TOPO).
+     Un bâtiment est coloré quand son centre est dans une cellule en eau ; sa forme n'indique pas la hauteur d'eau dans le bâtiment.
+     En gris : bâtiment hors d'eau au niveau choisi, ou non suivi par le modèle.</div>
     <div class="note" id="noteRelief">Relief : MNT LiDAR HD de l'IGN, utilisé pour l'affichage seulement. Le modèle garde ses propres altitudes.</div></div>
    <div class="etat" id="conf3d"><i></i><span id="conf3dTxt"></span></div></div>
   <div id="chargement">Préparation de la carte…</div></div>
@@ -598,8 +603,8 @@ async function creerCarte3d(centre, zoom){
   let volumes = null;
   try { const r = await fetch("tuiles/batiments_extrudes/batiments.json"); if (r.ok) volumes = await r.json(); } catch(e){}
   if (volumes) volumes.features.forEach(f => aVolume[f.id] = 1);
-  else { document.getElementById("o3dVol").checked = false; document.getElementById("o3dVol").disabled = true;
-         document.getElementById("noteVol").textContent = "Volumes indisponibles (dossier tuiles/batiments_extrudes absent) : bâtiments affichés en points."; }
+  const choixBat = document.getElementById("s3dBat");
+  if (!volumes){ choixBat.querySelector('[value="volumes"]').disabled = true; if (choixBat.value === "volumes") choixBat.value = "points"; }
   const sources = {
     plan:  {type:"raster", tiles:[tuilesIgn("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2","png")], tileSize:256, maxzoom:18, attribution:"© IGN / Géoplateforme"},
     ortho: {type:"raster", tiles:[tuilesIgn("ORTHOIMAGERY.ORTHOPHOTOS","jpeg")], tileSize:256, maxzoom:19}};
@@ -652,9 +657,27 @@ async function creerCarte3d(centre, zoom){
   carte3d.addLayer({id:"perimetre", type:"line", source:"perimetre", paint:{"line-color":"#222", "line-width":1.8, "line-dasharray":[3,2]}});
   // bâtiments : la couleur vient de l'état « e » que majBatiments3D recopie depuis etatBat ; e = 0 -> invisible
   const e = ["coalesce", ["feature-state","e"], 0];
-  if (volumes) carte3d.addLayer({id:"volumes", type:"fill-extrusion", source:"volumes", paint:{
-    "fill-extrusion-height":["*", ["get","h"], exag],
-    "fill-extrusion-color":["match", e, 1, COUL_BAT[1], 2, COUL_BAT[2], 3, COUL_BAT[3], "#d8d2c8"]}});
+  if (volumes){
+    carte3d.addLayer({id:"volumes", type:"fill-extrusion", source:"volumes", paint:{
+      "fill-extrusion-height":hauteurVolumes(),
+      "fill-extrusion-color":["match", e, 1, COUL_BAT[1], 2, COUL_BAT[2], 3, COUL_BAT[3], COUL_BAT_NEUTRE]}});
+    // emprises invisibles : elles servent seulement à reconnaître le bâtiment sous un clic quand les modèles détaillés sont affichés
+    carte3d.addLayer({id:"emprises", type:"fill", source:"volumes", paint:{"fill-opacity":0}});
+  }
+  // modèles détaillés (dossier tuiles/batiments), dessinés par batiments_detail.js. Le lien avec le modèle passe par
+  // l'identifiant BD TOPO : rangDe(identifiant) donne le rang j du bâtiment, et visBat3d[j] son état, donc sa couleur.
+  try {
+    const rangs = new Map(volumes ? volumes.features.map(f => [f.properties.c, f.id]) : []);
+    detail = await BatimentsDetail.creer({urlTileset:"tuiles/batiments/tileset.json", zoomMin:ZOOM_DETAIL,
+      rangDe:c => rangs.has(c) ? rangs.get(c) : -1, etats:visBat3d, couleurs:[COUL_BAT_NEUTRE, COUL_BAT[1], COUL_BAT[2], COUL_BAT[3]],
+      exageration:() => exag,
+      // quand le modèle détaillé d'un bâtiment est chargé, son volume simple s'aplatit (d = 1) pour lui laisser la place
+      surChange:(liste, present) => { if (volumes) liste.forEach(j => { if (j >= 0) carte3d.setFeatureState({source:"volumes", id:j}, {d:present ? 1 : 0}); }); }});
+    carte3d.addLayer(detail.couche);
+  } catch (err){
+    detail = null; console.warn("modèles détaillés indisponibles :", err);
+    choixBat.querySelector('[value="detail"]').disabled = true; if (choixBat.value === "detail") choixBat.value = volumes ? "volumes" : "points";
+  }
   carte3d.addLayer({id:"batiments", type:"circle", source:"batiments", paint:{
     "circle-radius":["case", ["==", e, 0], 0, 3.5], "circle-stroke-width":["case", ["==", e, 0], 0, .5], "circle-stroke-color":"#fff",
     "circle-opacity":.9, "circle-color":["match", e, 1, COUL_BAT[1], 2, COUL_BAT[2], 3, COUL_BAT[3], "#000"]}});
@@ -662,7 +685,7 @@ async function creerCarte3d(centre, zoom){
     "circle-stroke-color":"#fff", "circle-stroke-width":1.5}});
   majVisibilite3D();
   // clic : un piézomètre, un bâtiment affiché, ou à défaut les informations du point (mêmes textes qu'en 2D)
-  const cliquables = volumes ? ["piezo","batiments","volumes"] : ["piezo","batiments"];
+  const cliquables = volumes ? ["piezo","batiments","volumes","emprises"] : ["piezo","batiments"];
   carte3d.on("click", ev => {
     const f = carte3d.queryRenderedFeatures(ev.point, {layers:cliquables}).find(x => x.layer.id === "piezo" || visBat3d[x.id]);
     let html;
@@ -681,13 +704,25 @@ const COUCHES_3D = {oCom:["communes"], oPer:["perimetre","emprise"], oBande:["ba
 function majVisibilite3D(){
   if (!carte3d || !carte3d.getLayer("piezo")) return;
   for (const id in COUCHES_3D) COUCHES_3D[id].forEach(c => carte3d.setLayoutProperty(c, "visibility", opt(id) ? "visible" : "none"));
-  // bâtiments : en volume si la case est cochée (les points ne montrent alors que les bâtiments sans emprise), sinon tous en points
+  // bâtiments : modèles détaillés, volumes simples ou points, selon la liste du bandeau.
+  // Hors mode « points », les points ne montrent que les bâtiments du modèle sans emprise (donc sans volume).
+  const mode = document.getElementById("s3dBat").value;
   if (carte3d.getLayer("volumes")){
-    const enVolume = opt("o3dVol");
-    carte3d.setLayoutProperty("volumes", "visibility", enVolume ? "visible" : "none");
-    carte3d.setFilter("batiments", enVolume ? ["==", ["get","v"], 0] : null);
+    carte3d.setLayoutProperty("volumes", "visibility", mode === "points" ? "none" : "visible");
+    carte3d.setPaintProperty("volumes", "fill-extrusion-height", hauteurVolumes());
+    carte3d.setFilter("batiments", mode === "points" ? null : ["==", ["get","v"], 0]);
   }
+  if (detail) detail.afficher(mode === "detail");
 }
+// hauteur des volumes simples : hauteur BD TOPO x exagération. En mode « modèles détaillés » et à partir du zoom
+// ZOOM_DETAIL, un volume dont le modèle détaillé est chargé (d = 1) est aplati pour ne pas faire double emploi.
+function hauteurVolumes(){
+  const h = ["*", ["get","h"], exag];
+  if (document.getElementById("s3dBat").value !== "detail") return h;
+  return ["step", ["zoom"], h, ZOOM_DETAIL, ["case", ["==", ["coalesce", ["feature-state","d"], 0], 1], 0, h]];
+}
+const ZOOM_DETAIL = 14, COUL_BAT_NEUTRE = "#d8d2c8";
+let detail = null;                                       // la couche des modèles détaillés (null si indisponible)
 // recopie l'état des bâtiments (etatBat, calculé une seule fois pour les deux vues) dans la carte 3D,
 // en tenant compte des cases « Bâtiments touchés » et « Terrains sous le niveau marin non atteints »
 const visBat3d = new Uint8Array(NB);
@@ -695,11 +730,13 @@ const aVolume = new Uint8Array(NB);                      // 1 si le bâtiment j 
 const etatAffiche = (j, aBat, aBas) => { const e = etatBat[j]; return (!aBat || (e===3 && !aBas)) ? 0 : e; };
 function majBatiments3D(){
   const aBat = !!D.bat && opt("oBat"), aBas = opt("oBas");
+  let change = false;
   for (let j=0;j<NB;j++){
     const v = etatAffiche(j, aBat, aBas);
-    if (v !== visBat3d[j]){ visBat3d[j] = v; carte3d.setFeatureState({source:"batiments", id:j}, {e:v});
+    if (v !== visBat3d[j]){ visBat3d[j] = v; change = true; carte3d.setFeatureState({source:"batiments", id:j}, {e:v});
       if (aVolume[j]) carte3d.setFeatureState({source:"volumes", id:j}, {e:v}); }
   }
+  if (change && detail) detail.majEtats();                // les modèles détaillés reprennent les mêmes états
 }
 // demande à la carte 3D de relire l'image « eau » (après un changement de niveau marin ou d'option)
 function rafraichir3D(){
@@ -745,8 +782,9 @@ document.getElementById("plier3d").onclick = ev => { ev.preventDefault();
   d.style.display = plie ? "none" : "block"; ev.target.textContent = plie ? "détails et réglages" : "réduire"; };
 document.getElementById("exag").oninput = e => { exag = +e.target.value; document.getElementById("vExag").textContent = exag;
   if (carte3d && reliefDispo) carte3d.setTerrain({source:"relief", exaggeration:exag});
-  if (carte3d && carte3d.getLayer("volumes")) carte3d.setPaintProperty("volumes", "fill-extrusion-height", ["*", ["get","h"], exag]); };
-document.getElementById("o3dVol").onchange = majVisibilite3D;
+  if (carte3d && carte3d.getLayer("volumes")) carte3d.setPaintProperty("volumes", "fill-extrusion-height", hauteurVolumes());
+  if (carte3d) carte3d.triggerRepaint(); };
+document.getElementById("s3dBat").onchange = majVisibilite3D;
 document.getElementById("fond3d").onchange = e => { if (!carte3d) return;
   carte3d.setLayoutProperty("plan", "visibility", e.target.value === "plan" ? "visible" : "none");
   carte3d.setLayoutProperty("ortho", "visibility", e.target.value === "ortho" ? "visible" : "none"); };
@@ -830,8 +868,10 @@ document.getElementById("methode").innerHTML = `
  bas de chaque cellule de 10 m du RGE ALTI. Contrôle du 12/11/2026 sur les terrains de moins de 10 m : le point le plus bas du
  LiDAR dans la cellule s'écarte de l'altitude du modèle de 3 cm en médiane, mais le relief moyen affiché est plus haut de 17 cm
  en médiane, et 14 % des cellules s'en écartent de plus de 50 cm (digues, talus, fossés). L'eau peut donc sembler recouvrir un
- relief fin que le modèle ne distingue pas. Les bâtiments en volume reprennent l'emprise et la hauteur de la BD TOPO® (3 m par
- défaut quand la hauteur est inconnue) ; ils sont exagérés comme le relief. Seuls les bâtiments du modèle sont dessinés, et ceux
+ relief fin que le modèle ne distingue pas. En zoomant, les bâtiments sont dessinés avec leurs toits à partir de modèles 3D
+ issus du LiDAR (dossier tuiles/batiments, lu par batiments_detail.js) ; ils sont reliés aux bâtiments du modèle par leur identifiant
+ BD TOPO, et ceux que le modèle ne suit pas restent gris. À défaut de modèle détaillé, les bâtiments en volume reprennent l'emprise
+ et la hauteur de la BD TOPO® (3 m par défaut quand la hauteur est inconnue). Tous sont exagérés comme le relief. Seuls les bâtiments du modèle sont dessinés, et ceux
  dont l'emprise n'a pas été retrouvée restent des points (décompte dans tuiles/batiments_extrudes/fiche.json). La couleur d'un
  volume traduit l'état du bâtiment dans le modèle, déterminé par son centre : elle ne dit rien de la hauteur d'eau dans le bâtiment. Remplacer les altitudes du modèle par le LiDAR modifierait les seuils, les pertes de
  charge et tous les indicateurs : cela n'a pas été fait.</p>
@@ -885,13 +925,14 @@ async function verifierVues(){
     if ((carte3d.getFeatureState({source:"batiments", id:j}).e || 0) !== attendu) batDifferents++;                      // les points
     else if (aVolume[j] && (carte3d.getFeatureState({source:"volumes", id:j}).e || 0) !== attendu) batDifferents++; }   // les volumes
   const bilan = {chiffresEtImageIdentiques: resultats["2D"] === resultats["3D"], memeImage: GEMAPI.memeImage(), batimentsDifferents: batDifferents};
-  bilan.identique = bilan.chiffresEtImageIdentiques && bilan.memeImage && batDifferents === 0;
+  if (detail) bilan.modelesDetailles = detail.verifier();   // couleur de chaque sommet des modèles détaillés chargés
+  bilan.identique = bilan.chiffresEtImageIdentiques && bilan.memeImage && batDifferents === 0 && (!detail || bilan.modelesDetailles.ecarts === 0);
   if (vue !== depart) await basculerVue();
   console.log(bilan.identique ? "Vues 2D et 3D : résultats identiques (" + NIVEAUX_TEST.length + " niveaux marins, " + NB + " bâtiments)." : "ÉCART entre les vues 2D et 3D :", bilan);
   return bilan;
 }
 window.GEMAPI = {empreinte, relever, verifier, verifierVues, basculerVue,
-  vue: () => vue, carte3d: () => carte3d,
+  vue: () => vue, carte3d: () => carte3d, detail: () => detail,
   // vrai si la vue 3D affiche bien le même objet image que la vue 2D (et non une copie qui pourrait diverger)
   memeImage: () => !!carte3d && carte3d.getSource("eau").getCanvas() === eau.cv && coucheEau.getElement() === eau.cv};
 
