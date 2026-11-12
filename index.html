@@ -163,13 +163,17 @@ details summary{cursor:pointer;font-size:13px;font-weight:600}
     n'est simulée. Les chiffres sont exactement ceux de la vue 2D.
     <p style="margin:5px 0 0">Le relief affiché (LiDAR, plus fin) n'est pas celui du modèle : l'eau peut sembler recouvrir une digue ou un
     talus que le modèle ne distingue pas, ou s'arrêter au pied d'un creux.</p>
-    <div class="ligne" id="reglages3d">Relief et bâtiments exagérés × <b id="vExag">2</b> <input type="range" id="exag" min="1" max="10" value="2" style="width:100px">
+    <div class="ligne" id="reglages3d">Relief exagéré × <b id="vExag">1</b> <input type="range" id="exag" min="1" max="10" value="1" style="width:100px"
+     title="1 = relief réel. Au-delà, les différences d'altitude du marais (quelques mètres) sont amplifiées pour être visibles.">
      Fond <select id="fond3d"><option value="plan">Plan IGN</option><option value="ortho">Satellite</option></select></div>
     <div class="ligne">Bâtiments <select id="s3dBat"><option value="detail">modèles détaillés (avec toits)</option>
      <option value="volumes">volumes simples</option><option value="points">points</option></select></div>
+    <label class="cb" style="font-size:12px"><input type="checkbox" id="o3dPhoto" checked> Photo aérienne sur les toits (modèles détaillés)</label>
+    <div class="ligne"><button id="btEstuaire" title="Ramener la caméra au-dessus de l'estuaire de la Dives">Recentrer sur l'estuaire</button></div>
     <div class="note" id="noteVol">Modèles détaillés : bâtiments 3D issus du LiDAR, affichés en zoomant (sinon volumes simples de la BD TOPO).
      Un bâtiment est coloré quand son centre est dans une cellule en eau ; sa forme n'indique pas la hauteur d'eau dans le bâtiment.
-     En gris : bâtiment hors d'eau au niveau choisi, ou non suivi par le modèle.</div>
+     En gris : bâtiment hors d'eau au niveau choisi, ou non suivi par le modèle. Les bâtiments gardent leur hauteur réelle :
+     seul le relief est exagéré.</div>
     <div class="note" id="noteRelief">Relief : MNT LiDAR HD de l'IGN, utilisé pour l'affichage seulement. Le modèle garde ses propres altitudes.</div></div>
    <div class="etat" id="conf3d"><i></i><span id="conf3dTxt"></span></div></div>
   <div id="chargement">Préparation de la carte…</div></div>
@@ -583,7 +587,7 @@ document.getElementById("opa").oninput = e => { coucheEau.setOpacity(e.target.va
 // posée sur un relief. Le relief (tuiles/mnt, MNT LiDAR HD) ne sert qu'à l'affichage : le modèle ne le lit pas.
 // La carte 3D n'est créée qu'au premier clic sur le bouton, pour ne pas ralentir l'ouverture de la page.
 // =====================================================================================================
-let carte3d = null, vue = "2D", exag = 2, reliefDispo = false;   // exag : exagération verticale du relief et des bâtiments
+let carte3d = null, vue = "2D", exag = 1, reliefDispo = false;   // exag : exagération verticale du relief (pas des bâtiments)
 const elCarte = document.getElementById("carte"), elCarte3d = document.getElementById("carte3d");
 const [[SUD, OUEST], [NORD, EST]] = D.bounds;
 const COINS = [[OUEST,NORD],[EST,NORD],[EST,SUD],[OUEST,SUD]];      // coins de la grille : haut gauche, haut droit, bas droit, bas gauche
@@ -670,7 +674,7 @@ async function creerCarte3d(centre, zoom){
     const rangs = new Map(volumes ? volumes.features.map(f => [f.properties.c, f.id]) : []);
     detail = await BatimentsDetail.creer({urlTileset:"tuiles/batiments/tileset.json", zoomMin:ZOOM_DETAIL,
       rangDe:c => rangs.has(c) ? rangs.get(c) : -1, etats:visBat3d, couleurs:[COUL_BAT_NEUTRE, COUL_BAT[1], COUL_BAT[2], COUL_BAT[3]],
-      exageration:() => exag,
+      exageration:() => exag, photo:() => document.getElementById("o3dPhoto").checked,
       // quand le modèle détaillé d'un bâtiment est chargé, son volume simple s'aplatit (d = 1) pour lui laisser la place
       surChange:(liste, present) => { if (volumes) liste.forEach(j => { if (j >= 0) carte3d.setFeatureState({source:"volumes", id:j}, {d:present ? 1 : 0}); }); }});
     carte3d.addLayer(detail.couche);
@@ -714,10 +718,10 @@ function majVisibilite3D(){
   }
   if (detail) detail.afficher(mode === "detail");
 }
-// hauteur des volumes simples : hauteur BD TOPO x exagération. En mode « modèles détaillés » et à partir du zoom
+// hauteur des volumes simples : hauteur BD TOPO, sans exagération. En mode « modèles détaillés » et à partir du zoom
 // ZOOM_DETAIL, un volume dont le modèle détaillé est chargé (d = 1) est aplati pour ne pas faire double emploi.
 function hauteurVolumes(){
-  const h = ["*", ["get","h"], exag];
+  const h = ["get","h"];                                  // hauteur réelle : seul le relief est exagéré
   if (document.getElementById("s3dBat").value !== "detail") return h;
   return ["step", ["zoom"], h, ZOOM_DETAIL, ["case", ["==", ["coalesce", ["feature-state","d"], 0], 1], 0, h]];
 }
@@ -753,7 +757,12 @@ function rafraichir3D(){
   if (t && t.sourceCache && t.sourceCache.freeRtt) t.sourceCache.freeRtt();
   carte3d.triggerRepaint();
 }
-// passe d'une vue à l'autre en gardant le même endroit à l'écran ; l'état (niveau marin, options) n'est pas touché
+// Point de vue d'arrivée sur l'estuaire de la Dives : au-dessus de la mer, regard vers le sud (le marais),
+// Cabourg à droite, Houlgate et Dives-sur-Mer à gauche. Pour le changer : modifier ces quatre valeurs.
+const VUE_ESTUAIRE = {center:[-0.112, 49.279], zoom:14.1, pitch:62, bearing:165};
+// passe d'une vue à l'autre ; l'état (niveau marin, options) n'est pas touché.
+// Si la carte 2D montre tout le territoire (zoom faible), la caméra 3D vole vers l'estuaire ;
+// si l'on a zoomé en 2D sur un endroit précis, la vue 3D s'ouvre sur ce même endroit.
 let basculeEnCours = false;
 async function basculerVue(){
   if (basculeEnCours) return;
@@ -766,6 +775,7 @@ async function basculerVue(){
         if (elCarte3d.clientWidth < 700) document.getElementById("plier3d").click();   // petit écran : bandeau réduit au départ
       } else { carte3d.resize(); carte3d.jumpTo({center:[c.lng, c.lat], zoom:z}); }
       vue = "3D"; rafraichir3D();
+      if (z + 1 < 14) carte3d.flyTo(Object.assign({duration:3000, essential:true}, VUE_ESTUAIRE));
     } else {
       const c = carte3d.getCenter(), z = Math.round(carte3d.getZoom()+1);
       elCarte3d.style.display = "none"; elCarte.style.display = "block";
@@ -785,6 +795,8 @@ document.getElementById("exag").oninput = e => { exag = +e.target.value; documen
   if (carte3d && carte3d.getLayer("volumes")) carte3d.setPaintProperty("volumes", "fill-extrusion-height", hauteurVolumes());
   if (carte3d) carte3d.triggerRepaint(); };
 document.getElementById("s3dBat").onchange = majVisibilite3D;
+document.getElementById("o3dPhoto").onchange = () => { if (detail) detail.majPhoto(); };
+document.getElementById("btEstuaire").onclick = () => { if (carte3d) carte3d.flyTo(Object.assign({duration:2500, essential:true}, VUE_ESTUAIRE)); };
 document.getElementById("fond3d").onchange = e => { if (!carte3d) return;
   carte3d.setLayoutProperty("plan", "visibility", e.target.value === "plan" ? "visible" : "none");
   carte3d.setLayoutProperty("ortho", "visibility", e.target.value === "ortho" ? "visible" : "none"); };
@@ -871,7 +883,8 @@ document.getElementById("methode").innerHTML = `
  relief fin que le modèle ne distingue pas. En zoomant, les bâtiments sont dessinés avec leurs toits à partir de modèles 3D
  issus du LiDAR (dossier tuiles/batiments, lu par batiments_detail.js) ; ils sont reliés aux bâtiments du modèle par leur identifiant
  BD TOPO, et ceux que le modèle ne suit pas restent gris. À défaut de modèle détaillé, les bâtiments en volume reprennent l'emprise
- et la hauteur de la BD TOPO® (3 m par défaut quand la hauteur est inconnue). Tous sont exagérés comme le relief. Seuls les bâtiments du modèle sont dessinés, et ceux
+ et la hauteur de la BD TOPO® (3 m par défaut quand la hauteur est inconnue). Les bâtiments ne sont pas exagérés : ils sont
+ posés sur le relief exagéré, mais gardent leur hauteur réelle. Seuls les bâtiments du modèle sont dessinés, et ceux
  dont l'emprise n'a pas été retrouvée restent des points (décompte dans tuiles/batiments_extrudes/fiche.json). La couleur d'un
  volume traduit l'état du bâtiment dans le modèle, déterminé par son centre : elle ne dit rien de la hauteur d'eau dans le bâtiment. Remplacer les altitudes du modèle par le LiDAR modifierait les seuils, les pertes de
  charge et tous les indicateurs : cela n'a pas été fait.</p>
