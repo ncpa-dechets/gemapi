@@ -1,0 +1,10 @@
+{
+"type": "FeatureCollection",
+"name": "09_Enjeux_Ponctuels",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::2154" } },
+"features": [
+{ "type": "Feature", "properties": { "ID_MAP": 1, "ID_GASPAR": "14DDTM20160004", "DESCRIPT": "Port", "CATEGORIE": "0306", "IDENTANNEE": "2020" }, "geometry": { "type": "Point", "coordinates": [ 474662.104768939316273, 6914890.888539981096983 ] } },
+{ "type": "Feature", "properties": { "ID_MAP": 2, "ID_GASPAR": "14DDTM20160004", "DESCRIPT": "Mouillage", "CATEGORIE": "0306", "IDENTANNEE": "2020" }, "geometry": { "type": "Point", "coordinates": [ 475192.108618038822897, 6914998.490344045683742 ] } },
+{ "type": "Feature", "properties": { "ID_MAP": 3, "ID_GASPAR": "14DDTM20160004", "DESCRIPT": "Gare", "CATEGORIE": "0507", "IDENTANNEE": "2020" }, "geometry": { "type": "Point", "coordinates": [ 474086.978697431506589, 6914280.798651061952114 ] } }
+]
+}
