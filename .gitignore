@@ -1,3 +1,5 @@
 # blocs d'altitude téléchargés par outils/preparer_mnt.py (se retéléchargent, inutile de les publier)
 outils/cache_mnt/
+# emprises BD TOPO téléchargées par outils/preparer_batiments.py
+outils/cache_batiments/
 __pycache__/

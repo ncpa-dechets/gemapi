@@ -155,12 +155,18 @@ details summary{cursor:pointer;font-size:13px;font-weight:600}
 </aside>
 <main><div id="zone"><div id="carte"></div><div id="carte3d"></div>
   <button id="btVue" title="Passer de la carte à plat à la vue en relief, et inversement. Les résultats sont les mêmes.">Vue 3D</button>
-  <div id="bandeau3d"><b>Vue 3D : une représentation cartographique, pas une simulation.</b>
-   Les couleurs de submersion calculées par le modèle (cellules de 10 m) sont posées sur le relief. Aucune surface d'eau
-   n'est simulée. Les chiffres sont exactement ceux de la vue 2D.
-   <div class="ligne" id="reglages3d">Relief exagéré × <b id="vExag">4</b> <input type="range" id="exag" min="1" max="10" value="4" style="width:100px">
-    Fond <select id="fond3d"><option value="plan">Plan IGN</option><option value="ortho">Satellite</option></select></div>
-   <div class="note" id="noteRelief">Relief : MNT LiDAR HD de l'IGN, utilisé pour l'affichage seulement. Le modèle garde ses propres altitudes.</div></div>
+  <div id="bandeau3d"><b>Vue 3D : une représentation cartographique, pas une simulation.</b> <a href="#" id="plier3d">réduire</a>
+   <div id="detail3d">Les couleurs de submersion calculées par le modèle (cellules de 10 m) sont posées sur le relief. Aucune surface d'eau
+    n'est simulée. Les chiffres sont exactement ceux de la vue 2D.
+    <p style="margin:5px 0 0">Le relief affiché (LiDAR, plus fin) n'est pas celui du modèle : l'eau peut sembler recouvrir une digue ou un
+    talus que le modèle ne distingue pas, ou s'arrêter au pied d'un creux.</p>
+    <div class="ligne" id="reglages3d">Relief et bâtiments exagérés × <b id="vExag">2</b> <input type="range" id="exag" min="1" max="10" value="2" style="width:100px">
+     Fond <select id="fond3d"><option value="plan">Plan IGN</option><option value="ortho">Satellite</option></select></div>
+    <label class="cb" style="font-size:12px"><input type="checkbox" id="o3dVol" checked> Bâtiments en volume</label>
+    <div class="note" id="noteVol">Volumes : emprises et hauteurs de la BD TOPO. Un bâtiment est coloré quand son centre est dans une cellule
+     en eau ; son volume n'indique pas la hauteur d'eau dans le bâtiment. En gris : bâtiment hors d'eau au niveau choisi.</div>
+    <div class="note" id="noteRelief">Relief : MNT LiDAR HD de l'IGN, utilisé pour l'affichage seulement. Le modèle garde ses propres altitudes.</div></div>
+   <div class="etat" id="conf3d"><i></i><span id="conf3dTxt"></span></div></div>
   <div id="chargement">Préparation de la carte…</div></div>
  <div id="tableau"><table id="tab"></table></div>
  <div id="barre"><span id="bInfo" class="stat">Cliquez sur la carte pour connaître l'altitude, le seuil d'inondation et le classement PPRL d'un point.</span></div>
@@ -345,7 +351,8 @@ function etatNiveau(Lm){
   if (Lm < L20-e) return ["moy", "Sous le scénario de référence du PPRL : extrapolation vers le bas (les niveaux d'eau locaux du scénario à 5,10 m sont abaissés d'autant)."];
   if (Math.abs(Lm-L20) < e) return ["ok", `Scénario de référence du PPRL (centennal + 20 cm) : dans l'emprise modélisée, la zone en eau reprend exactement l'aléa du PPRL (${fr(c[0].bat_pprl)} bâtiments).`];
   if (Lm < L60-e) return ["moy", "Entre les deux scénarios modélisés du PPRL : interpolation."];
-  if (Math.abs(Lm-L60) < e) return ["ok", `Scénario du PPRL à échéance 100 ans (centennal + 60 cm) : dans l'emprise modélisée, la zone en eau reprend exactement l'aléa du PPRL (${fr(c[1].bat_pprl)} bâtiments).`];
+  if (Math.abs(Lm-L60) < e) return ["ok", `Scénario du PPRL à échéance 100 ans (centennal + 60 cm) : dans l'emprise modélisée, la zone en eau reprend l'aléa du PPRL (${fr(c[1].bat_pprl)} bâtiments dans l'aléa` +
+    (c[1].bat_modele_emprise !== c[1].bat_pprl ? `, ${fr(c[1].bat_modele_emprise)} selon le modèle, qui ajoute le lit et l'estran).` : ").")];
   return ["bas", "Au-delà des scénarios modélisés : extrapolation progressive vers la projection statique de l'événement extrême du TRI (8,21 m NGF). Ordre de grandeur seulement."];
 }
 function majTexte(){
@@ -362,6 +369,10 @@ function majTexte(){
   document.getElementById("kStat").textContent = D.bat ? fr(hbStat[idxStat(Lm)]) : "n.d.";
   const [cl, tx] = etatNiveau(Lm), el = document.getElementById("etat");
   el.className = "etat " + cl; document.getElementById("etatTxt").textContent = tx;
+  // le même niveau de confiance, en version courte, reste affiché dans le bandeau de la vue 3D
+  document.getElementById("conf3d").className = "etat " + cl;
+  document.getElementById("conf3dTxt").textContent = fr(Lm,2) + " m NGF : " + {ok:"niveau calé sur le PPRL, ou sous le niveau de protection des digues.",
+    moy:"niveau interpolé ou extrapolé près des scénarios du PPRL.", bas:"au-delà des scénarios du PPRL, ordre de grandeur seulement."}[cl];
   const proche = (a,b) => Math.abs(a-b) < PAS/2;
   const combi = proche(Lm, NIV[idxNiv(evt+elev)]);
   document.querySelectorAll("#evts button").forEach(b => b.classList.toggle("actif", combi && proche(+b.dataset.v, evt)));
@@ -409,7 +420,7 @@ const PAL_ZONE = [0, rgba(215,25,28,255), rgba(245,138,31,255), rgba(241,224,90,
 const hex = c => "#" + [c&255, (c>>8)&255, (c>>16)&255].map(v => v.toString(16).padStart(2,"0")).join("");
 function majPprl(){
   const m = +document.getElementById("sPprl").value, leg = document.getElementById("legPprl");
-  if (!m){ carte.removeLayer(couchePprl); leg.innerHTML = ""; return; }
+  if (!m){ carte.removeLayer(couchePprl); leg.innerHTML = ""; rafraichir3D(); return; }
   const px = pprl.px;
   for (let i=0;i<N;i++){ const k = K[i]; px[i] = m===1 ? PAL_ALEA[k&7] : m===2 ? PAL_ALEA[(k>>3)&7] : PAL_ZONE[(k>>6)&7]; }
   pprl.ctx.putImageData(pprl.img, 0, 0);
@@ -418,6 +429,7 @@ function majPprl(){
   leg.innerHTML = `<div class="note" style="margin:6px 0 2px">${m===3 ? "Zonage réglementaire du PPRL" : "Aléa de submersion du PPRL (hauteur et vitesse)"}</div>` +
     pal.map((c,k) => k ? `<div class="leg"><i style="background:${hex(c)}"></i>${noms[k]}</div>` : "").join("") +
     `<div class="note">Astuce : décocher « Hauteurs d'eau estimées » pour voir la couche seule.</div>`;
+  rafraichir3D();
 }
 document.getElementById("sPprl").onchange = majPprl;
 const couchePer = L.layerGroup([
@@ -425,7 +437,10 @@ const couchePer = L.layerGroup([
   L.geoJSON(D.pprl.perimetre, {interactive:false, style:{color:"#222", weight:1.8, dashArray:"6 4", fill:false}})]).addTo(carte);
 const coucheBande = L.geoJSON(D.pprl.bande, {interactive:false, style:{color:"#7a0177", weight:1, fillColor:"#7a0177", fillOpacity:.35}});
 const coucheRecul = L.geoJSON(D.pprl.recul, {interactive:false, style:{color:"#8c510a", weight:1, fillColor:"#bf812d", fillOpacity:.5}});
-const bascule = (id, couche) => document.getElementById(id).onchange = e => e.target.checked ? couche.addTo(carte) : carte.removeLayer(couche);
+// case à cocher -> affiche ou masque la couche dans la vue 2D, puis dans la vue 3D (majVisibilite3D)
+const bascule = (id, couche) => document.getElementById(id).onchange = e => {
+  if (e.target.checked) couche.addTo(carte); else carte.removeLayer(couche);
+  majVisibilite3D(); };
 bascule("oPer", couchePer); bascule("oBande", coucheBande); bascule("oRecul", coucheRecul);
 
 // ---------- piézomètres ----------
@@ -437,15 +452,16 @@ function sparkline(serie){
   return `<svg width="${w}" height="${h+14}" style="display:block;margin-top:4px"><polyline points="${pts}" fill="none" stroke="#6a3d9a" stroke-width="1.2"/>
    <text x="0" y="${h+12}" font-size="10">${serie[0][0]}</text><text x="${w}" y="${h+12}" font-size="10" text-anchor="end">${serie[serie.length-1][0]}</text></svg>`;
 }
-(D.piezo||[]).forEach(p => {
-  L.circleMarker([p.lat,p.lon], {radius:6, color:"#fff", weight:1.5, fillColor:"#6a3d9a", fillOpacity:1})
-   .bindPopup(`<div class="pop"><h3>Piézomètre ${p.code}</h3><table>
+// texte de la bulle d'un piézomètre (commun aux deux vues)
+const htmlPiezo = p => `<div class="pop"><h3>Piézomètre ${p.code}</h3><table>
      <tr><td>Commune</td><td>${p.commune}</td></tr><tr><td>Altitude du repère</td><td>${p.alt!=null?fr(+p.alt,2)+" m NGF":"–"}</td></tr>
      <tr><td>Mesures</td><td>${fr(p.n)} (${p.debut} → ${p.fin})</td></tr>
      <tr><td>Niveau de nappe min / médian / max</td><td>${fr(p.min,2)} / ${fr(p.med,2)} / <b>${fr(p.max,2)}</b> m NGF</td></tr>
      <tr><td>Dernière mesure</td><td>${fr(p.dernier,2)} m NGF</td></tr></table>${sparkline(p.serie)}
-     <div class="note">Moyennes mensuelles. Comparer le niveau max de la nappe à l'altitude du sol environnant.</div></div>`, {maxWidth:320})
-   .addTo(couchePiezo);
+     <div class="note">Moyennes mensuelles. Comparer le niveau max de la nappe à l'altitude du sol environnant.</div></div>`;
+(D.piezo||[]).forEach(p => {
+  L.circleMarker([p.lat,p.lon], {radius:6, color:"#fff", weight:1.5, fillColor:"#6a3d9a", fillOpacity:1})
+   .bindPopup(htmlPiezo(p), {maxWidth:320}).addTo(couchePiezo);
 });
 bascule("oPiezo", couchePiezo);
 
@@ -562,7 +578,7 @@ document.getElementById("opa").oninput = e => { coucheEau.setOpacity(e.target.va
 // posée sur un relief. Le relief (tuiles/mnt, MNT LiDAR HD) ne sert qu'à l'affichage : le modèle ne le lit pas.
 // La carte 3D n'est créée qu'au premier clic sur le bouton, pour ne pas ralentir l'ouverture de la page.
 // =====================================================================================================
-let carte3d = null, vue = "2D", exag = 4, reliefDispo = false;
+let carte3d = null, vue = "2D", exag = 2, reliefDispo = false;   // exag : exagération verticale du relief et des bâtiments
 const elCarte = document.getElementById("carte"), elCarte3d = document.getElementById("carte3d");
 const [[SUD, OUEST], [NORD, EST]] = D.bounds;
 const COINS = [[OUEST,NORD],[EST,NORD],[EST,SUD],[OUEST,SUD]];      // coins de la grille : haut gauche, haut droit, bas droit, bas gauche
@@ -574,6 +590,16 @@ async function creerCarte3d(centre, zoom){
   let mnt = null;
   try { const r = await fetch("tuiles/mnt/mnt.json"); if (r.ok) mnt = await r.json(); } catch(e){}
   reliefDispo = !!mnt;
+  // emprises et hauteurs des bâtiments, écrites par outils/preparer_batiments.py ; sans elles, les bâtiments restent des points.
+  // Chaque emprise porte comme identifiant le rang j du bâtiment dans le modèle : c'est le seul lien avec les résultats.
+  // POUR ALLER PLUS LOIN (modèles 3D détaillés, dossier tuiles/batiments) : la propriété « c » de chaque emprise est
+  // l'identifiant BD TOPO (cleabs), présent aussi dans les modèles détaillés. Il suffira d'afficher ces modèles à la
+  // place de la couche « volumes » et de leur donner la couleur de etatBat[j] : le calcul n'aura pas à changer.
+  let volumes = null;
+  try { const r = await fetch("tuiles/batiments_extrudes/batiments.json"); if (r.ok) volumes = await r.json(); } catch(e){}
+  if (volumes) volumes.features.forEach(f => aVolume[f.id] = 1);
+  else { document.getElementById("o3dVol").checked = false; document.getElementById("o3dVol").disabled = true;
+         document.getElementById("noteVol").textContent = "Volumes indisponibles (dossier tuiles/batiments_extrudes absent) : bâtiments affichés en points."; }
   const sources = {
     plan:  {type:"raster", tiles:[tuilesIgn("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2","png")], tileSize:256, maxzoom:18, attribution:"© IGN / Géoplateforme"},
     ortho: {type:"raster", tiles:[tuilesIgn("ORTHOIMAGERY.ORTHOPHOTOS","jpeg")], tileSize:256, maxzoom:19}};
@@ -592,25 +618,99 @@ async function creerCarte3d(centre, zoom){
     center:[centre.lng, centre.lat], zoom, pitch:55, bearing:-20, maxPitch:75, maxZoom:18});
   carte3d.addControl(new maplibregl.NavigationControl({visualizePitch:true}), "top-left");
   carte3d.addControl(new maplibregl.ScaleControl({unit:"metric"}));
-  await new Promise(pret => carte3d.once("load", pret));
+  // on attend que la carte soit prête à recevoir des couches (sans attendre le chargement de toutes les tuiles)
+  await new Promise(pret => carte3d.isStyleLoaded() ? pret() : carte3d.once("style.load", pret));
   if (mnt) carte3d.setTerrain({source:"relief", exaggeration:exag});
   // l'image des hauteurs d'eau : le même canvas que la vue 2D, étiré entre les quatre coins de la grille
   carte3d.addSource("eau", {type:"canvas", canvas:eau.cv, coordinates:COINS, animate:false});
   carte3d.addLayer({id:"eau", type:"raster", source:"eau",
     paint:{"raster-opacity":document.getElementById("opa").value/100, "raster-resampling":"nearest", "raster-fade-duration":0}});
-  carte3d.on("click", e => {
-    const info = infoPoint(e.lngLat.lat, e.lngLat.lng);
-    if (!info) return;
-    new maplibregl.Popup({maxWidth:"340px"}).setLngLat(e.lngLat).setHTML(info.html).addTo(carte3d);
-    document.getElementById("bInfo").textContent = info.court;
+  // l'image de comparaison au PPRL (aléa ou zonage), masquée tant qu'aucune couche n'est choisie
+  carte3d.addSource("pprl", {type:"canvas", canvas:pprl.cv, coordinates:COINS, animate:false});
+  carte3d.addLayer({id:"pprl", type:"raster", source:"pprl", layout:{visibility:"none"},
+    paint:{"raster-opacity":.65, "raster-resampling":"nearest", "raster-fade-duration":0}});
+  // les couches vectorielles : mêmes données et mêmes couleurs que dans la vue 2D
+  const geo = donnees => ({type:"geojson", data:donnees});
+  const points = (liste, lon, lat) => ({type:"FeatureCollection", features:liste.map((p,k) =>
+    ({type:"Feature", properties:{k}, geometry:{type:"Point", coordinates:[lon(p,k), lat(p,k)]}}))});
+  const o = bornesPprl.getWest(), e_ = bornesPprl.getEast(), s = bornesPprl.getSouth(), n = bornesPprl.getNorth();
+  carte3d.addSource("communes", geo(D.contours));
+  carte3d.addSource("perimetre", geo(D.pprl.perimetre));
+  carte3d.addSource("emprise", geo({type:"Feature", properties:{}, geometry:{type:"LineString", coordinates:[[o,s],[e_,s],[e_,n],[o,n],[o,s]]}}));
+  carte3d.addSource("bande", geo(D.pprl.bande));
+  carte3d.addSource("recul", geo(D.pprl.recul));
+  carte3d.addSource("piezo", geo(points(D.piezo||[], p => p.lon, p => p.lat)));
+  // generateId : chaque bâtiment reçoit son rang j comme identifiant, le même que dans etatBat
+  const ptsBat = points(B.cell, (c,j) => B.lon[j], (c,j) => B.lat[j]);
+  ptsBat.features.forEach((f,j) => f.properties.v = aVolume[j]);      // v = 1 si le bâtiment a aussi une emprise (un volume)
+  carte3d.addSource("batiments", {type:"geojson", generateId:true, data:ptsBat});
+  if (volumes) carte3d.addSource("volumes", geo(volumes));
+  carte3d.addLayer({id:"bande", type:"fill", source:"bande", paint:{"fill-color":"#7a0177", "fill-opacity":.35}});
+  carte3d.addLayer({id:"recul", type:"fill", source:"recul", paint:{"fill-color":"#bf812d", "fill-opacity":.5}});
+  carte3d.addLayer({id:"communes", type:"line", source:"communes", paint:{"line-color":"#B91E27", "line-width":1.2, "line-opacity":.8}});
+  carte3d.addLayer({id:"emprise", type:"line", source:"emprise", paint:{"line-color":"#666", "line-width":1, "line-dasharray":[3,4]}});
+  carte3d.addLayer({id:"perimetre", type:"line", source:"perimetre", paint:{"line-color":"#222", "line-width":1.8, "line-dasharray":[3,2]}});
+  // bâtiments : la couleur vient de l'état « e » que majBatiments3D recopie depuis etatBat ; e = 0 -> invisible
+  const e = ["coalesce", ["feature-state","e"], 0];
+  if (volumes) carte3d.addLayer({id:"volumes", type:"fill-extrusion", source:"volumes", paint:{
+    "fill-extrusion-height":["*", ["get","h"], exag],
+    "fill-extrusion-color":["match", e, 1, COUL_BAT[1], 2, COUL_BAT[2], 3, COUL_BAT[3], "#d8d2c8"]}});
+  carte3d.addLayer({id:"batiments", type:"circle", source:"batiments", paint:{
+    "circle-radius":["case", ["==", e, 0], 0, 3.5], "circle-stroke-width":["case", ["==", e, 0], 0, .5], "circle-stroke-color":"#fff",
+    "circle-opacity":.9, "circle-color":["match", e, 1, COUL_BAT[1], 2, COUL_BAT[2], 3, COUL_BAT[3], "#000"]}});
+  carte3d.addLayer({id:"piezo", type:"circle", source:"piezo", paint:{"circle-radius":6, "circle-color":"#6a3d9a",
+    "circle-stroke-color":"#fff", "circle-stroke-width":1.5}});
+  majVisibilite3D();
+  // clic : un piézomètre, un bâtiment affiché, ou à défaut les informations du point (mêmes textes qu'en 2D)
+  const cliquables = volumes ? ["piezo","batiments","volumes"] : ["piezo","batiments"];
+  carte3d.on("click", ev => {
+    const f = carte3d.queryRenderedFeatures(ev.point, {layers:cliquables}).find(x => x.layer.id === "piezo" || visBat3d[x.id]);
+    let html;
+    if (f && f.layer.id === "piezo") html = htmlPiezo(D.piezo[f.properties.k]);
+    else if (f) html = infoBat(f.id);
+    else {
+      const info = infoPoint(ev.lngLat.lat, ev.lngLat.lng);
+      if (!info) return;
+      html = info.html; document.getElementById("bInfo").textContent = info.court;
+    }
+    new maplibregl.Popup({maxWidth:"340px"}).setLngLat(ev.lngLat).setHTML(html).addTo(carte3d);
   });
+}
+// cases à cocher -> couches de la vue 3D
+const COUCHES_3D = {oCom:["communes"], oPer:["perimetre","emprise"], oBande:["bande"], oRecul:["recul"], oPiezo:["piezo"]};
+function majVisibilite3D(){
+  if (!carte3d || !carte3d.getLayer("piezo")) return;
+  for (const id in COUCHES_3D) COUCHES_3D[id].forEach(c => carte3d.setLayoutProperty(c, "visibility", opt(id) ? "visible" : "none"));
+  // bâtiments : en volume si la case est cochée (les points ne montrent alors que les bâtiments sans emprise), sinon tous en points
+  if (carte3d.getLayer("volumes")){
+    const enVolume = opt("o3dVol");
+    carte3d.setLayoutProperty("volumes", "visibility", enVolume ? "visible" : "none");
+    carte3d.setFilter("batiments", enVolume ? ["==", ["get","v"], 0] : null);
+  }
+}
+// recopie l'état des bâtiments (etatBat, calculé une seule fois pour les deux vues) dans la carte 3D,
+// en tenant compte des cases « Bâtiments touchés » et « Terrains sous le niveau marin non atteints »
+const visBat3d = new Uint8Array(NB);
+const aVolume = new Uint8Array(NB);                      // 1 si le bâtiment j a une emprise dans tuiles/batiments_extrudes
+const etatAffiche = (j, aBat, aBas) => { const e = etatBat[j]; return (!aBat || (e===3 && !aBas)) ? 0 : e; };
+function majBatiments3D(){
+  const aBat = !!D.bat && opt("oBat"), aBas = opt("oBas");
+  for (let j=0;j<NB;j++){
+    const v = etatAffiche(j, aBat, aBas);
+    if (v !== visBat3d[j]){ visBat3d[j] = v; carte3d.setFeatureState({source:"batiments", id:j}, {e:v});
+      if (aVolume[j]) carte3d.setFeatureState({source:"volumes", id:j}, {e:v}); }
+  }
 }
 // demande à la carte 3D de relire l'image « eau » (après un changement de niveau marin ou d'option)
 function rafraichir3D(){
   if (vue !== "3D" || !carte3d) return;
-  const s = carte3d.getSource("eau");
-  if (!s) return;
-  s.play(); s.pause();                                   // pause() recopie le contenu actuel du canvas dans la carte
+  if (!carte3d.getLayer("piezo")) return;                // carte encore en cours de création
+  const comparaison = +document.getElementById("sPprl").value > 0;
+  carte3d.setLayoutProperty("pprl", "visibility", comparaison ? "visible" : "none");
+  for (const nom of comparaison ? ["eau","pprl"] : ["eau"]){
+    const s = carte3d.getSource(nom); s.play(); s.pause();   // pause() recopie le contenu actuel du canvas dans la carte
+  }
+  majBatiments3D();
   // avec le relief, MapLibre garde en mémoire le terrain déjà « peint » : on lui demande de le repeindre
   const t = carte3d.terrain;
   if (t && t.sourceCache && t.sourceCache.freeRtt) t.sourceCache.freeRtt();
@@ -625,7 +725,9 @@ async function basculerVue(){
     if (vue === "2D"){
       const c = carte.getCenter(), z = carte.getZoom()-1;        // MapLibre compte les zooms avec 1 de moins que Leaflet
       elCarte.style.display = "none"; elCarte3d.style.display = "block";
-      if (!carte3d){ document.getElementById("btVue").textContent = "Chargement de la vue 3D…"; await creerCarte3d(c, z); } else { carte3d.resize(); carte3d.jumpTo({center:[c.lng, c.lat], zoom:z}); }
+      if (!carte3d){ document.getElementById("btVue").textContent = "Chargement de la vue 3D…"; await creerCarte3d(c, z);
+        if (elCarte3d.clientWidth < 700) document.getElementById("plier3d").click();   // petit écran : bandeau réduit au départ
+      } else { carte3d.resize(); carte3d.jumpTo({center:[c.lng, c.lat], zoom:z}); }
       vue = "3D"; rafraichir3D();
     } else {
       const c = carte3d.getCenter(), z = Math.round(carte3d.getZoom()+1);
@@ -638,8 +740,13 @@ async function basculerVue(){
   } finally { basculeEnCours = false; }
 }
 document.getElementById("btVue").onclick = basculerVue;
+document.getElementById("plier3d").onclick = ev => { ev.preventDefault();
+  const d = document.getElementById("detail3d"), plie = d.style.display !== "none";
+  d.style.display = plie ? "none" : "block"; ev.target.textContent = plie ? "détails et réglages" : "réduire"; };
 document.getElementById("exag").oninput = e => { exag = +e.target.value; document.getElementById("vExag").textContent = exag;
-  if (carte3d && reliefDispo) carte3d.setTerrain({source:"relief", exaggeration:exag}); };
+  if (carte3d && reliefDispo) carte3d.setTerrain({source:"relief", exaggeration:exag});
+  if (carte3d && carte3d.getLayer("volumes")) carte3d.setPaintProperty("volumes", "fill-extrusion-height", ["*", ["get","h"], exag]); };
+document.getElementById("o3dVol").onchange = majVisibilite3D;
 document.getElementById("fond3d").onchange = e => { if (!carte3d) return;
   carte3d.setLayoutProperty("plan", "visibility", e.target.value === "plan" ? "visible" : "none");
   carte3d.setLayoutProperty("ortho", "visibility", e.target.value === "ortho" ? "visible" : "none"); };
@@ -681,6 +788,7 @@ document.getElementById("methode").innerHTML = `
  <tr><td>Aléa du PPRL (ha)</td><td>${fr(c0.pprl_ha)}</td><td>${fr(c1.pprl_ha)}</td></tr>
  <tr><td>Ancienne approche statique (ha)</td><td>${fr(c0.statique_emprise_ha)}</td><td>${fr(c1.statique_emprise_ha)}</td></tr>
  <tr><td>Bâtiments dans l'aléa du PPRL</td><td>${fr(c0.bat_pprl)}</td><td>${fr(c1.bat_pprl)}</td></tr>
+ <tr><td>Bâtiments, présent modèle (dans l'emprise)</td><td>${fr(c0.bat_modele_emprise)}</td><td>${fr(c1.bat_modele_emprise)}</td></tr>
  <tr><td>Bâtiments, ancienne approche (tout le territoire)</td><td>${fr(c0.bat_statique)}</td><td>${fr(c1.bat_statique)}</td></tr>
  <tr><td>Bâtiments, présent modèle (tout le territoire)</td><td>${fr(c0.bat_modele)}</td><td>${fr(c1.bat_modele)}</td></tr></table>
 <p><b>Principe.</b> Niveau d'eau local = niveau marin à la côte − perte de charge locale. Un terrain est en eau quand ce niveau
@@ -714,6 +822,19 @@ document.getElementById("methode").innerHTML = `
 <p><b>Limites.</b> Ni durée de l'événement, ni brèche simulée, ni débit de la Dives, ni ouvrages hydrauliques autres que ceux
  implicitement pris en compte par le PPRL. Entre et au-delà des scénarios du PPRL, les résultats sont des ordres de grandeur.
  Précision verticale du relief : 10 à 20 cm. Un bâtiment est compté s'il a son centre dans une cellule en eau.</p>
+<p><b>Vue 3D.</b> La vue 3D est une représentation cartographique : elle pose sur un relief l'image des hauteurs d'eau calculée
+ par le modèle, la même que celle de la vue 2D. Elle ne calcule rien et ne simule aucune surface d'eau ; les indicateurs, la courbe
+ et le tableau sont identiques dans les deux vues (contrôle : GEMAPI.verifierVues() dans la console du navigateur).
+ Le relief affiché vient du MNT LiDAR HD de l'IGN (1 pixel ≈ 3 m, altitudes arrondies à 10 cm, mer à 0 m) et il est exagéré
+ verticalement pour rendre le marais lisible (facteur affiché dans la vue). Le modèle, lui, garde ses altitudes : le point le plus
+ bas de chaque cellule de 10 m du RGE ALTI. Contrôle du 12/11/2026 sur les terrains de moins de 10 m : le point le plus bas du
+ LiDAR dans la cellule s'écarte de l'altitude du modèle de 3 cm en médiane, mais le relief moyen affiché est plus haut de 17 cm
+ en médiane, et 14 % des cellules s'en écartent de plus de 50 cm (digues, talus, fossés). L'eau peut donc sembler recouvrir un
+ relief fin que le modèle ne distingue pas. Les bâtiments en volume reprennent l'emprise et la hauteur de la BD TOPO® (3 m par
+ défaut quand la hauteur est inconnue) ; ils sont exagérés comme le relief. Seuls les bâtiments du modèle sont dessinés, et ceux
+ dont l'emprise n'a pas été retrouvée restent des points (décompte dans tuiles/batiments_extrudes/fiche.json). La couleur d'un
+ volume traduit l'état du bâtiment dans le modèle, déterminé par son centre : elle ne dit rien de la hauteur d'eau dans le bâtiment. Remplacer les altitudes du modèle par le LiDAR modifierait les seuils, les pertes de
+ charge et tous les indicateurs : cela n'a pas été fait.</p>
 <p><b>Relief</b> : RGE ALTI® de l'IGN (flux ${D.params.couche}), m NGF (IGN69), calcul au pas de ${fr(D.params.res_fine,1)} m,
  affichage au pas de ${fr(G.res)} m (chaque cellule garde l'altitude de son point le plus bas). <b>Enjeux</b> : bâtiments de la
  BD TOPO® (IGN). <b>PPRL</b> : couches SIG de la DDTM du Calvados. <b>Nappes</b> : piézomètres Hub'Eau (ADES, BRGM).
@@ -751,8 +872,26 @@ async function verifier(){
   console.log(ecarts.length ? "ÉCARTS avec la référence :\n" + ecarts.join("\n") : "Résultats identiques à la référence (" + ref.empreintes.length + " niveaux marins).");
   return {identique:!ecarts.length, ecarts};
 }
-window.GEMAPI = {empreinte, relever, verifier, basculerVue,
-  vue: () => vue,
+//   GEMAPI.verifierVues()  compare les résultats de la vue 2D et de la vue 3D (bascule aller et retour)
+async function verifierVues(){
+  const depart = vue, lire = () => JSON.stringify(relever().empreintes), resultats = {};
+  resultats[vue] = lire();
+  await basculerVue();
+  resultats[vue] = lire();
+  if (vue !== "3D") await basculerVue();                 // on termine le contrôle dans la vue 3D
+  // les bâtiments dessinés en 3D : l'état enregistré dans la carte doit être celui du calcul
+  const aBat = !!D.bat && opt("oBat"), aBas = opt("oBas"); let batDifferents = 0;
+  for (let j=0;j<NB;j++){ const attendu = etatAffiche(j, aBat, aBas);
+    if ((carte3d.getFeatureState({source:"batiments", id:j}).e || 0) !== attendu) batDifferents++;                      // les points
+    else if (aVolume[j] && (carte3d.getFeatureState({source:"volumes", id:j}).e || 0) !== attendu) batDifferents++; }   // les volumes
+  const bilan = {chiffresEtImageIdentiques: resultats["2D"] === resultats["3D"], memeImage: GEMAPI.memeImage(), batimentsDifferents: batDifferents};
+  bilan.identique = bilan.chiffresEtImageIdentiques && bilan.memeImage && batDifferents === 0;
+  if (vue !== depart) await basculerVue();
+  console.log(bilan.identique ? "Vues 2D et 3D : résultats identiques (" + NIVEAUX_TEST.length + " niveaux marins, " + NB + " bâtiments)." : "ÉCART entre les vues 2D et 3D :", bilan);
+  return bilan;
+}
+window.GEMAPI = {empreinte, relever, verifier, verifierVues, basculerVue,
+  vue: () => vue, carte3d: () => carte3d,
   // vrai si la vue 3D affiche bien le même objet image que la vue 2D (et non une copie qui pourrait diverger)
   memeImage: () => !!carte3d && carte3d.getSource("eau").getCanvas() === eau.cv && coucheEau.getElement() === eau.cv};
 

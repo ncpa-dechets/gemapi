@@ -1,0 +1,13 @@
+{
+ "source": "BD TOPO - IGN (Géoplateforme, couche BDTOPO_V3:batiment)",
+ "licence": "Licence Ouverte Etalab 2.0",
+ "date": "12/11/2026",
+ "batiments_modele": 13168,
+ "rattaches": 13018,
+ "dont_par_proximite": 340,
+ "en_points": 150,
+ "hauteur_inconnue": 415,
+ "hauteur_defaut_m": 3.0,
+ "meme_nombre_logements_pct": 99.8,
+ "usage": "Affichage en 3D uniquement. Le décompte des bâtiments touchés reste celui du modèle (centre du bâtiment)."
+}
