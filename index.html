@@ -12,170 +12,244 @@
 <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.js"></script>
 <script src="batiments_detail.js"></script>
 <style>
-:root{--rouge:#B91E27;--vert:#B1B993;--txt:#1d2433;--mut:#5b6474;--bord:#e2e5ea;--fond:#f6f7f9}
+:root{--rouge:#B91E27;--rouge-c:#fcecec;--vert:#B1B993;--vert-c:#eef0e6;--txt:#1d2433;--mut:#5b6474;--bord:#e3e6eb;--fond:#f3f4f6;
+ --bleu:#1f5f99;--bleu-c:#e8f1fa;--ombre:0 4px 18px rgba(16,24,40,.16);--hbar:140px}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;font-family:Calibri,"Segoe UI",system-ui,sans-serif;color:var(--txt);background:#fff}
+html,body{margin:0;height:100%;font-family:Calibri,"Segoe UI",system-ui,sans-serif;color:var(--txt);background:var(--fond)}
 #app{display:flex;height:100vh}
-aside{width:320px;flex:0 0 320px;overflow-y:auto;border-right:1px solid var(--bord);background:var(--fond)}
+aside{width:340px;flex:0 0 340px;display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--bord);background:var(--fond)}
 main{flex:1 1 auto;display:flex;flex-direction:column;min-width:0}
 #zone{flex:1 1 auto;height:0;position:relative}
 #carte,#carte3d{position:absolute;inset:0}
 #carte3d{display:none;background:#cfe3f1}
-#btVue{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1001;padding:6px 16px;font-size:13.5px;font-weight:700;box-shadow:0 1px 5px rgba(0,0,0,.3)}
-#bandeau3d{display:none;position:absolute;left:10px;bottom:34px;z-index:1001;max-width:380px;background:rgba(255,255,255,.95);border-left:4px solid var(--rouge);border-radius:4px;padding:8px 10px;font-size:12px;line-height:1.35;box-shadow:0 1px 5px rgba(0,0,0,.3)}
-#bandeau3d .ligne{font-size:12px;margin:6px 0 0}
-.maplibregl-popup-content{font-family:inherit}
-header{padding:14px 16px 12px;border-left:5px solid var(--rouge);background:#fff;border-bottom:1px solid var(--bord)}
-.retour{display:inline-block;margin:0 0 6px;font-size:12.5px;color:#6b7078;text-decoration:none}.retour:hover{color:#B91E27;text-decoration:underline}
+/* ---------- en-tête et onglets ---------- */
+header{padding:14px 18px 12px;border-left:5px solid var(--rouge);background:#fff}
+.retour{display:inline-block;margin:0 0 6px;font-size:12.5px;color:#6b7078;text-decoration:none}.retour:hover{color:var(--rouge);text-decoration:underline}
 .eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--rouge);font-weight:700}
-header h1{font-size:19px;margin:3px 0 2px}header p{margin:0;font-size:12px;color:var(--mut)}
-section{padding:10px 16px;border-bottom:1px solid var(--bord)}
-section h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:0 0 8px}
+header h1{font-size:22px;margin:3px 0 2px;line-height:1.15}header p{margin:0;font-size:12px;color:var(--mut)}
 .demo{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--rouge);border:1px solid var(--rouge);border-radius:999px;padding:1px 8px;vertical-align:middle}
-.alerte p{margin:5px 0 0}
-.alerte{background:#fdecec;border-left:4px solid var(--rouge);padding:8px 10px;font-size:12px;line-height:1.35}
-.niveau{display:flex;align-items:baseline;gap:6px}.niveau b{font-size:32px;color:#0b4f8a}.niveau span{color:var(--mut)}
-input[type=range]{width:100%}
-.ligne{display:flex;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap;font-size:13px}
-.ligne .t{flex:0 0 100%;font-size:11.5px;color:var(--mut);margin-bottom:-2px}
-button{border:1px solid var(--bord);background:#fff;border-radius:14px;padding:3px 10px;cursor:pointer;font:inherit;font-size:12.5px}
-button:hover{border-color:var(--rouge)}button.plein,button.actif{background:var(--rouge);color:#fff;border-color:var(--rouge)}
-.etat{display:flex;gap:8px;align-items:flex-start;background:#fff;border:1px solid var(--bord);border-radius:8px;padding:6px 8px;font-size:12px;line-height:1.35;margin-top:6px}
-.etat i{flex:0 0 10px;height:10px;border-radius:50%;margin-top:3px;background:#999}
+.avert{margin-top:9px;font-size:12px;line-height:1.35;color:#7a2a2f;background:var(--rouge-c);border-radius:6px;padding:6px 9px}
+.avert a{color:var(--rouge);font-weight:700}
+nav.onglets{display:flex;background:#fff;border-bottom:1px solid var(--bord);padding:0 8px}
+nav.onglets button{flex:1;border:0;border-radius:0;background:none;padding:11px 4px 9px;font-size:14px;font-weight:700;color:var(--mut);border-bottom:3px solid transparent}
+nav.onglets button:hover{color:var(--txt)}
+nav.onglets button.actif{color:var(--rouge);border-bottom-color:var(--rouge);background:none}
+.panneau{display:none;flex:1 1 auto;min-height:0;overflow-y:auto;padding:12px}
+.panneau.actif{display:block}
+.bloc{background:#fff;border:1px solid var(--bord);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.bloc h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 10px;font-weight:700}
+/* ---------- commandes ---------- */
+button{border:1px solid var(--bord);background:#fff;border-radius:999px;padding:4px 11px;cursor:pointer;font:inherit;font-size:12.5px;color:var(--txt);transition:background .15s,border-color .15s,color .15s}
+button:hover{border-color:var(--rouge);color:var(--rouge)}
+button.plein,button.actif{background:var(--rouge);color:#fff;border-color:var(--rouge)}
+button:disabled{opacity:.5;cursor:default}
+.boutons{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+input[type=range]{accent-color:var(--rouge);width:100%}
+select{font:inherit;font-size:13px;padding:4px 6px;border:1px solid var(--bord);border-radius:6px;background:#fff;max-width:100%;min-width:0;flex:1}
+label.sw{display:flex;align-items:center;gap:10px;font-size:13px;margin:8px 0;cursor:pointer;line-height:1.25}
+label.sw input{appearance:none;-webkit-appearance:none;flex:0 0 30px;width:30px;height:17px;margin:0;border-radius:999px;background:#cdd2da;position:relative;cursor:pointer;transition:background .15s}
+label.sw input::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:left .15s}
+label.sw input:checked{background:var(--rouge)}label.sw input:checked::after{left:15px}
+label.sw input:focus-visible{outline:2px solid var(--rouge);outline-offset:2px}
+.reglage{display:flex;align-items:center;gap:10px;font-size:13px;margin:9px 0}
+.reglage>span:first-child{flex:0 0 96px;color:var(--mut)}
+.reglage input[type=range]{flex:1;min-width:0}
+.reglage b{min-width:36px;text-align:right;font-variant-numeric:tabular-nums}
+.sep-t{border-top:1px solid var(--bord);margin:10px 0 2px}
+/* ---------- résultats ---------- */
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kpi{background:var(--fond);border-radius:8px;padding:8px 10px}
+.kpi .v{font-size:19px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:11.5px;color:var(--mut);margin-top:2px;line-height:1.25}.kpi .s{font-size:10.5px;color:var(--mut);margin-top:2px}
+.kpi.grand{background:var(--bleu-c)}.kpi.grand .v{font-size:28px;color:var(--bleu)}
+.kpi.grand.r{background:var(--rouge-c)}.kpi.grand.r .v{color:var(--rouge)}
+.etat{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.4}
+.etat i,#conf3d i{flex:0 0 10px;width:10px;height:10px;border-radius:50%;margin-top:4px;background:#999}
 .etat.ok i{background:#2e8b57}.etat.moy i{background:#e0a100}.etat.bas i{background:#B91E27}
-.kpis{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.kpi{background:#fff;border:1px solid var(--bord);border-radius:8px;padding:6px 8px}
-.kpi .v{font-size:18px;font-weight:700}.kpi .l{font-size:11px;color:var(--mut)}.kpi .s{font-size:10.5px;color:var(--mut);margin-top:1px}
-label.cb{display:flex;gap:6px;align-items:center;font-size:13px;margin:3px 0}
-select{font:inherit;font-size:13px;padding:2px 4px;max-width:100%}
-.leg{display:flex;align-items:center;gap:6px;font-size:12.5px;margin:2px 0}
-.leg i{flex:0 0 16px;width:16px;height:12px;border:1px solid rgba(0,0,0,.15);display:inline-block}
+/* ---------- légende ---------- */
+.leg{display:flex;align-items:center;gap:8px;font-size:12.5px;margin:5px 0;line-height:1.3}
+.leg i{flex:0 0 16px;width:16px;height:12px;border:1px solid rgba(0,0,0,.12);border-radius:3px;display:inline-block}
 .leg i.rond{border-radius:50%;flex:0 0 11px;width:11px;height:11px}
-.leg i.hach{background:repeating-linear-gradient(45deg,#4292c6 0 3px,#d6e9f6 3px 5px)}
-.leg i.trait{height:0;border:0;border-top:2px dashed #333}
+.leg i.hach{background:repeating-linear-gradient(45deg,#6fa8d6 0 3px,#dbeaf6 3px 7px)}
+.leg i.trait{height:0;border:0;border-top:2px dashed #333;border-radius:0}
+#legEau .barreEau{height:14px;border-radius:7px;border:1px solid rgba(0,0,0,.08)}
+#legEau .grad{position:relative;height:16px;margin:3px 7px 4px;font-size:11px;color:var(--mut)}
+#legEau .grad span{position:absolute;transform:translateX(-50%);white-space:nowrap}
 .note{font-size:12px;color:var(--mut);line-height:1.4}
 .note p{margin:6px 0}.note table{border-collapse:collapse;margin:4px 0}.note td,.note th{border:1px solid var(--bord);padding:2px 5px;text-align:right;font-size:11.5px}
 .note td:first-child,.note th:first-child{text-align:left}
-details summary{cursor:pointer;font-size:13px;font-weight:600}
+.alerte p{margin:6px 0 0}.alerte{font-size:12.5px;line-height:1.4;border-left:4px solid var(--rouge)}
+details summary{cursor:pointer;font-size:13px;font-weight:700}
+#bloc3d.inactif .contenu3d{opacity:.45;pointer-events:none}
+#bloc3d .invite{display:none;margin-bottom:6px}#bloc3d.inactif .invite{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut)}
+.wmsitem{display:flex;justify-content:space-between;font-size:12px;margin:4px 0}
+.wms input{width:100%;margin:3px 0;font:inherit;font-size:13px;padding:5px 7px;border:1px solid var(--bord);border-radius:6px}
+/* ---------- éléments posés sur la carte ---------- */
+.flottant{position:absolute;z-index:1001;background:rgba(255,255,255,.96);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);border-radius:12px;box-shadow:var(--ombre);border:1px solid rgba(0,0,0,.05)}
+#vueSeg{top:12px;left:50%;transform:translateX(-50%);display:flex;padding:3px;border-radius:999px}
+#vueSeg button{white-space:nowrap;border:0;border-radius:999px;padding:6px 16px;font-weight:700;font-size:13.5px;background:none;color:var(--mut)}
+#vueSeg button:hover{color:var(--txt)}#vueSeg button.actif{background:var(--rouge);color:#fff}
+#avert3d{display:none;top:58px;right:12px;max-width:290px;padding:8px 12px;font-size:12px;line-height:1.35;border-left:4px solid var(--rouge)}
+#niveauBox{left:50%;bottom:14px;transform:translateX(-50%);width:min(800px,calc(100% - 24px));padding:10px 16px 10px}
+.nivHaut{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.niveau{display:flex;align-items:baseline;gap:5px}
+.niveau .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);font-weight:700;margin-right:4px}
+.niveau b{font-size:30px;line-height:1;color:var(--bleu);min-width:70px;text-align:right;font-variant-numeric:tabular-nums}
+.niveau span{color:var(--mut);font-size:13px}
+.pas{display:flex;gap:4px}.pas button{height:28px;padding:0 9px;font-size:12px;font-weight:700}
+#conf3d{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;background:var(--fond);border-radius:999px;padding:3px 11px 3px 9px;cursor:help}
+#conf3d i{margin-top:0}#conf3d.ok i{background:#2e8b57}#conf3d.moy i{background:#e0a100}#conf3d.bas i{background:#B91E27}
+.piste{position:relative;margin:10px 0 0;padding-bottom:18px}
+.piste input{display:block;margin:0;height:18px;cursor:pointer}
+#reperes span{position:absolute;top:20px;font-size:10.5px;color:var(--mut);transform:translateX(-50%);cursor:pointer;padding:0 3px}
+#reperes span:hover{color:var(--rouge)}
+#bandePprl{position:absolute;top:19px;height:4px;cursor:help;background:var(--rouge);border-radius:2px;opacity:.75}
+.puces{display:flex;gap:6px 16px;flex-wrap:wrap;align-items:center;margin-top:4px}
+.grp{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.grp .t{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);font-weight:700;margin-right:2px}
+.grp button{padding:3px 9px;font-size:12px}
+#zone .leaflet-bottom,#zone .maplibregl-ctrl-bottom-left,#zone .maplibregl-ctrl-bottom-right{bottom:var(--hbar)}
+.maplibregl-popup-content{font-family:inherit;border-radius:8px}
+.leaflet-popup-content-wrapper{border-radius:8px}
+/* ---------- tableau et barre d'information ---------- */
 #tableau{display:none;max-height:38vh;overflow:auto;border-top:2px solid var(--rouge);background:#fff}
 #tableau table{border-collapse:collapse;width:100%;font-size:12.5px}
-#tableau th,#tableau td{padding:4px 8px;border-bottom:1px solid var(--bord);text-align:right;white-space:nowrap}
+#tableau th,#tableau td{padding:5px 8px;border-bottom:1px solid var(--bord);text-align:right;white-space:nowrap}
 #tableau th{background:#eef1f5;position:sticky;top:0;cursor:pointer;user-select:none}
 #tableau td:first-child,#tableau th:first-child{text-align:left}
 #tableau tr:hover td{background:#fff7e0;cursor:pointer}
-#barre{display:flex;gap:8px;align-items:center;padding:6px 10px;border-top:1px solid var(--bord);font-size:12.5px;background:#fff}
+#barre{display:flex;gap:8px;align-items:center;padding:6px 12px;border-top:1px solid var(--bord);font-size:12.5px;background:#fff}
 #barre .stat{color:var(--mut)}
 .leaflet-image-layer.grille{image-rendering:pixelated;image-rendering:crisp-edges}
 .pop h3{margin:0 0 4px;font-size:14px}.pop table{font-size:12px;border-collapse:collapse}.pop td{padding:1px 6px 1px 0;vertical-align:top}
 .pop ul{margin:4px 0;padding-left:16px;max-height:120px;overflow:auto;font-size:11.5px}
 .pop .sep{border-top:1px solid var(--bord);margin-top:5px;padding-top:4px}
-#chargement{position:absolute;inset:0;background:rgba(255,255,255,.85);z-index:1000;display:flex;align-items:center;justify-content:center;font-size:15px}
-.wmsitem{display:flex;justify-content:space-between;font-size:12px;margin:2px 0}
-@media(max-width:860px){#app{flex-direction:column}aside{width:100%;flex:0 0 auto;max-height:45vh}main{flex:1 1 auto}}
+#chargement{position:absolute;inset:0;background:rgba(255,255,255,.85);z-index:1002;display:flex;align-items:center;justify-content:center;font-size:15px}
 .leaflet-container path.leaflet-interactive:focus,.leaflet-container .leaflet-interactive:focus{outline:none}
+@media(max-width:860px){
+ #app{flex-direction:column}aside{width:100%;flex:0 0 42vh;order:2;border-right:0;border-top:1px solid var(--bord)}main{flex:1 1 auto;order:1}
+ header{padding:8px 14px}.retour,header p{display:none}header h1{font-size:17px}.avert{margin-top:5px}
+ #niveauBox{bottom:8px;padding:8px 10px}.niveau .lbl{display:none}.niveau b{font-size:24px;min-width:56px}
+ .puces{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}.grp{flex-wrap:nowrap}.grp button{white-space:nowrap}
+ #avert3d{left:12px;right:auto}.det3d{display:none}
+}
 </style></head><body>
 <div id="app">
 <aside>
  <header><a class="retour" href="../index.html" title="Retour à l'accueil Champ des possibles">← Tous les outils</a><div class="eyebrow">NCPA · Gestion du cycle de l'eau – GEMAPI</div>
-  <h1>Montée des eaux<span class="demo">Modèle simplifié</span></h1><p id="sousTitre"></p></header>
- <section><div class="alerte"><b>Outil pédagogique, calé sur le PPRL mais sans valeur réglementaire.</b>
-  <p>Pour un niveau marin choisi à la côte, l'outil estime le niveau d'eau atteint à l'intérieur des terres à partir des
-  deux scénarios modélisés du PPRL de l'estuaire de la Dives (référence +20 cm et +60 cm), qu'il reproduit à l'identique,
-  et il interpole ou extrapole pour les autres niveaux.</p>
-  <p>Il ne simule ni la durée des tempêtes, ni les brèches, ni les crues de la Dives. Hors de l'emprise étudiée par le
-  PPRL, il revient à une simple projection du niveau marin sur le relief (majorante).</p>
-  <p><b>Le PPRL reste la seule référence réglementaire.</b></p></div></section>
- <section><h2>Niveau marin à la côte</h2>
-  <div class="niveau"><b id="vNiv">–</b><span>m NGF</span></div>
-  <input type="range" id="curseur" min="0" step="1" value="0">
-  <div class="ligne"><button id="moins">− 10 cm</button><button id="plus">+ 10 cm</button></div>
-  <div class="ligne" id="evts"><span class="t">Événement marin (niveau actuel, m NGF)</span>
-   <button data-v="4.15" title="Niveau atteint lors de la tempête Xynthia (2010), période de retour 1 à 5 ans">Xynthia 4,15</button>
-   <button data-v="4.6" title="Événement fréquent du TRI : période de retour 20 ans">20 ans 4,60</button>
-   <button data-v="4.9" title="Événement moyen du TRI et du PPRL : période de retour 100 ans">Centennal 4,90</button>
-   <button data-v="8.2" title="Événement extrême du TRI (8,21 m) : plus haute mer astronomique + surcote millénale + houle">Extrême 8,20</button></div>
-  <div class="ligne" id="elevs"><span class="t">Élévation du niveau de la mer</span>
-   <button data-v="0">aucune</button><button data-v="0.2" title="Hypothèse du scénario de référence du PPRL">+ 20 cm</button>
-   <button data-v="0.6" title="Hypothèse du PPRL à échéance 100 ans">+ 60 cm</button><button data-v="1">+ 1 m</button></div>
-  <div class="etat" id="etat"><i></i><span id="etatTxt"></span></div>
- </section>
- <section><h2>Bilan sur le territoire</h2>
-  <div class="kpis">
-   <div class="kpi"><div class="v" id="kHa">–</div><div class="l">ha en eau</div><div class="s" id="kHaS"></div></div>
-   <div class="kpi"><div class="v" id="kBat">–</div><div class="l">bâtiments touchés</div><div class="s" id="kBatS"></div></div>
-   <div class="kpi"><div class="v" id="kLog">–</div><div class="l">logements touchés</div></div>
-   <div class="kpi"><div class="v" id="kFort">–</div><div class="l">bâtiments avec plus d'1 m d'eau</div></div>
-   <div class="kpi"><div class="v" id="kBas">–</div><div class="l">ha sous le niveau marin non atteints</div></div>
-   <div class="kpi"><div class="v" id="kStat">–</div><div class="l">bâtiments avec l'ancienne approche statique</div></div>
+  <h1>Montée des eaux<span class="demo">Modèle simplifié</span></h1><p id="sousTitre"></p>
+  <div class="avert"><b>Outil pédagogique</b>, calé sur le PPRL mais sans valeur réglementaire. <a href="#" id="lienInfo">En savoir plus</a></div></header>
+ <nav class="onglets"><button data-o="res" class="actif">Résultats</button><button data-o="couches">Couches</button><button data-o="info">À propos</button></nav>
+
+ <div class="panneau actif" id="p-res">
+  <div class="bloc"><h2>Bilan sur le territoire</h2>
+   <div class="kpis">
+    <div class="kpi grand"><div class="v" id="kHa">–</div><div class="l">ha en eau</div><div class="s" id="kHaS"></div></div>
+    <div class="kpi grand r"><div class="v" id="kBat">–</div><div class="l">bâtiments touchés</div><div class="s" id="kBatS"></div></div>
+    <div class="kpi"><div class="v" id="kLog">–</div><div class="l">logements touchés</div></div>
+    <div class="kpi"><div class="v" id="kFort">–</div><div class="l">bâtiments avec plus d'1 m d'eau</div></div>
+    <div class="kpi"><div class="v" id="kBas">–</div><div class="l">ha sous le niveau marin non atteints</div></div>
+    <div class="kpi"><div class="v" id="kStat">–</div><div class="l">bâtiments avec l'ancienne approche statique</div></div>
+   </div>
+   <div class="boutons"><button id="btTab">Tableau par commune</button><button id="btCsv">Exporter CSV</button></div></div>
+  <div class="bloc"><h2>Fiabilité du niveau choisi</h2><div class="etat" id="etat"><i></i><span id="etatTxt"></span></div></div>
+  <div class="bloc"><h2>Courbe d'exposition</h2><canvas id="courbe" height="220"></canvas>
+   <div class="note">Traits verticaux (et trait rouge sous le curseur du niveau marin) : scénarios modélisés du PPRL (5,10 et 5,50 m NGF). Cliquer sur la courbe pour choisir un niveau.</div></div>
+ </div>
+
+ <div class="panneau" id="p-couches">
+  <div class="bloc"><h2>Affichage</h2>
+   <label class="sw"><input type="checkbox" id="oEau" checked> Hauteurs d'eau estimées</label>
+   <label class="sw"><input type="checkbox" id="oBas" checked> Terrains sous le niveau marin non atteints</label>
+   <label class="sw"><input type="checkbox" id="oBat" checked> Bâtiments touchés</label>
+   <label class="sw"><input type="checkbox" id="oPiezo"> Piézomètres (nappes)</label>
+   <label class="sw"><input type="checkbox" id="oCom" checked> Limites communales</label>
+   <label class="sw"><input type="checkbox" id="oTerr" checked> Limiter au territoire</label>
+   <label class="sw"><input type="checkbox" id="oMer"> Montrer la mer détectée (contrôle)</label>
+   <div class="reglage" title="Mémorisée séparément pour la vue 2D et la vue 3D"><span>Opacité de l'eau</span><input type="range" id="opa" min="20" max="100" value="80"><b id="vOpa">80 %</b></div>
   </div>
-  <div class="ligne"><button id="btTab">Tableau par commune</button><button id="btCsv">Exporter CSV</button></div>
- </section>
- <section><h2>Courbe d'exposition</h2><canvas id="courbe" height="210"></canvas>
-  <div class="note">Traits verticaux : scénarios modélisés du PPRL (5,10 et 5,50 m NGF). Cliquer sur la courbe pour choisir un niveau.</div></section>
- <section><h2>Affichage</h2>
-  <label class="cb"><input type="checkbox" id="oEau" checked> Hauteurs d'eau estimées</label>
-  <label class="cb"><input type="checkbox" id="oBas" checked> Terrains sous le niveau marin non atteints</label>
-  <label class="cb"><input type="checkbox" id="oBat" checked> Bâtiments touchés</label>
-  <label class="cb"><input type="checkbox" id="oPiezo"> Piézomètres (nappes)</label>
-  <label class="cb"><input type="checkbox" id="oCom" checked> Limites communales</label>
-  <label class="cb"><input type="checkbox" id="oTerr" checked> Limiter au territoire</label>
-  <label class="cb"><input type="checkbox" id="oMer"> Montrer la mer détectée (contrôle)</label>
-  <div class="ligne">Opacité <input type="range" id="opa" min="20" max="100" value="80" style="width:140px"></div>
- </section>
- <section><h2>Couches du PPRL</h2>
-  <div class="ligne">Comparer à <select id="sPprl"><option value="0">– aucune couche –</option>
-   <option value="1">Aléa PPRL, référence + 20 cm</option><option value="2">Aléa PPRL, + 60 cm (2100)</option>
-   <option value="3">Zonage réglementaire</option></select></div>
-  <label class="cb"><input type="checkbox" id="oPer" checked> Périmètre du PPRL et emprise modélisée</label>
-  <label class="cb"><input type="checkbox" id="oBande"> Bandes de précaution derrière les digues</label>
-  <label class="cb"><input type="checkbox" id="oRecul"> Recul du trait de côte (aléa fort)</label>
-  <div id="legPprl"></div>
- </section>
- <section><h2>Légende</h2>
-  <div class="note" style="margin-bottom:4px">Hauteur d'eau estimée</div>
-  <div class="leg"><i style="background:#9ecae1"></i>moins de 0,5 m</div>
-  <div class="leg"><i style="background:#4292c6"></i>0,5 à 1 m</div>
-  <div class="leg"><i style="background:#2166ac"></i>1 à 2 m</div>
-  <div class="leg"><i style="background:#08306b"></i>plus de 2 m</div>
-  <div class="leg"><i class="hach"></i>hachuré : hors emprise PPRL, projection statique (majorante)</div>
-  <div class="leg"><i style="background:#f4a259"></i>sous le niveau marin mais non atteint (digues, éloignement) : sensible en cas de brèche ou de remontée de nappe</div>
-  <div class="leg"><i style="background:#b8e0f5"></i>mer détectée (si affichée)</div>
-  <div class="leg"><i class="rond" style="background:#B91E27"></i>bâtiment touché</div>
-  <div class="leg"><i class="rond" style="background:#5c0a10"></i>bâtiment avec plus d'1 m d'eau</div>
-  <div class="leg"><i class="rond" style="background:#f4a259"></i>bâtiment sous le niveau marin, non atteint</div>
-  <div class="leg"><i class="rond" style="background:#6a3d9a"></i>piézomètre</div>
-  <div class="leg"><i class="trait"></i>périmètre du PPRL (tirets gris : emprise modélisée)</div>
- </section>
- <section><details><summary>Couches WMS complémentaires</summary>
-  <div class="note" style="margin:6px 0">Ajouter un flux WMS (ex. zonages Géorisques…) : adresse du service et nom de
-   la couche, tels qu'affichés dans QGIS. Les couches ajoutées sont mémorisées dans ce navigateur.</div>
-  <input id="wUrl" placeholder="https://…/wms" style="width:100%;margin:2px 0">
-  <input id="wCouche" placeholder="nom de la couche" style="width:100%;margin:2px 0">
-  <input id="wNom" placeholder="libellé (facultatif)" style="width:100%;margin:2px 0">
-  <button id="wAjout" style="margin-top:4px">Ajouter</button><div id="wListe"></div>
- </details></section>
- <section><details><summary>Méthode, calage et sources</summary><div class="note" id="methode"></div></details></section>
-</aside>
-<main><div id="zone"><div id="carte"></div><div id="carte3d"></div>
-  <button id="btVue" title="Passer de la carte à plat à la vue en relief, et inversement. Les résultats sont les mêmes.">Vue 3D</button>
-  <div id="bandeau3d"><b>Vue 3D : une représentation cartographique, pas une simulation.</b> <a href="#" id="plier3d">réduire</a>
-   <div id="detail3d">Les couleurs de submersion calculées par le modèle (cellules de 10 m) sont posées sur le relief. Aucune surface d'eau
-    n'est simulée. Les chiffres sont exactement ceux de la vue 2D.
-    <p style="margin:5px 0 0">Le relief affiché (LiDAR, plus fin) n'est pas celui du modèle : l'eau peut sembler recouvrir une digue ou un
-    talus que le modèle ne distingue pas, ou s'arrêter au pied d'un creux.</p>
-    <div class="ligne" id="reglages3d">Relief exagéré × <b id="vExag">1</b> <input type="range" id="exag" min="1" max="10" value="1" style="width:100px"
-     title="1 = relief réel. Au-delà, les différences d'altitude du marais (quelques mètres) sont amplifiées pour être visibles.">
-     Fond <select id="fond3d"><option value="plan">Plan IGN</option><option value="ortho">Satellite</option></select></div>
-    <div class="ligne">Bâtiments <select id="s3dBat"><option value="detail">modèles détaillés (avec toits)</option>
+  <div class="bloc"><h2>Couches du PPRL</h2>
+   <div class="reglage"><span>Comparer à</span><select id="sPprl"><option value="0">– aucune couche –</option>
+    <option value="1">Aléa PPRL, référence + 20 cm</option><option value="2">Aléa PPRL, + 60 cm (2100)</option>
+    <option value="3">Zonage réglementaire</option></select></div>
+   <label class="sw"><input type="checkbox" id="oPer" checked> Périmètre du PPRL et emprise modélisée</label>
+   <label class="sw"><input type="checkbox" id="oBande"> Bandes de précaution derrière les digues</label>
+   <label class="sw"><input type="checkbox" id="oRecul"> Recul du trait de côte (aléa fort)</label>
+   <div id="legPprl"></div>
+  </div>
+  <div class="bloc inactif" id="bloc3d"><h2>Vue 3D</h2>
+   <div class="invite">Réglages actifs en vue 3D. <button id="btVers3d">Passer en 3D</button></div>
+   <div class="contenu3d">
+    <div class="reglage" title="1 = relief réel. Au-delà, les différences d'altitude du marais (quelques mètres) sont amplifiées pour être visibles."><span>Relief exagéré</span><input type="range" id="exag" min="1" max="10" value="1"><b>× <span id="vExag">1</span></b></div>
+    <div class="reglage"><span>Fond</span><select id="fond3d"><option value="ortho" selected>Photo aérienne (IGN)</option><option value="plan">Plan IGN</option></select></div>
+    <div class="reglage"><span>Bâtiments</span><select id="s3dBat"><option value="detail">modèles détaillés (avec toits)</option>
      <option value="volumes">volumes simples</option><option value="points">points</option></select></div>
-    <label class="cb" style="font-size:12px"><input type="checkbox" id="o3dPhoto" checked> Photo aérienne sur les toits (modèles détaillés)</label>
-    <div class="ligne"><button id="btEstuaire" title="Ramener la caméra au-dessus de l'estuaire de la Dives">Recentrer sur l'estuaire</button></div>
+    <label class="sw"><input type="checkbox" id="o3dPhoto" checked> Photo aérienne sur les toits (modèles détaillés)</label>
+    <div class="boutons"><button id="btEstuaire" title="Ramener la caméra au-dessus de l'estuaire de la Dives">Recentrer sur l'estuaire</button></div>
+    <div class="sep-t"></div>
     <div class="note" id="noteVol">Modèles détaillés : bâtiments 3D issus du LiDAR, affichés en zoomant (sinon volumes simples de la BD TOPO).
      Un bâtiment est coloré quand son centre est dans une cellule en eau ; sa forme n'indique pas la hauteur d'eau dans le bâtiment.
      En gris : bâtiment hors d'eau au niveau choisi, ou non suivi par le modèle. Les bâtiments gardent leur hauteur réelle :
      seul le relief est exagéré.</div>
-    <div class="note" id="noteRelief">Relief : MNT LiDAR HD de l'IGN, utilisé pour l'affichage seulement. Le modèle garde ses propres altitudes.</div></div>
-   <div class="etat" id="conf3d"><i></i><span id="conf3dTxt"></span></div></div>
+    <div class="note" id="noteRelief" style="margin-top:6px">Relief : MNT LiDAR HD de l'IGN, utilisé pour l'affichage seulement. Le modèle garde ses propres altitudes.
+     Le relief affiché, plus fin que celui du modèle, peut faire sembler l'eau recouvrir une digue ou s'arrêter au pied d'un creux.</div>
+   </div>
+  </div>
+  <div class="bloc"><h2>Légende</h2>
+   <div id="legEau"><div class="note" style="margin-bottom:5px">Hauteur d'eau estimée</div><div class="barreEau"></div><div class="grad"></div></div>
+   <div class="leg"><i class="hach"></i>rayé : hors emprise PPRL, projection statique (majorante)</div>
+   <div class="leg"><i style="background:#f4a259;opacity:.6"></i>sous le niveau marin mais non atteint (digues, éloignement) : sensible en cas de brèche ou de remontée de nappe</div>
+   <div class="leg"><i style="background:#b8e0f5"></i>mer détectée (si affichée)</div>
+   <div class="leg"><i class="rond" style="background:#B91E27"></i>bâtiment touché</div>
+   <div class="leg"><i class="rond" style="background:#5c0a10"></i>bâtiment avec plus d'1 m d'eau</div>
+   <div class="leg"><i class="rond" style="background:#f4a259"></i>bâtiment sous le niveau marin, non atteint</div>
+   <div class="leg"><i class="rond" style="background:#6a3d9a"></i>piézomètre</div>
+   <div class="leg"><i class="trait"></i>périmètre du PPRL (tirets gris : emprise modélisée)</div>
+  </div>
+ </div>
+
+ <div class="panneau" id="p-info">
+  <div class="bloc alerte"><b>Outil pédagogique, calé sur le PPRL mais sans valeur réglementaire.</b>
+   <p>Pour un niveau marin choisi à la côte, l'outil estime le niveau d'eau atteint à l'intérieur des terres à partir des
+   deux scénarios modélisés du PPRL de l'estuaire de la Dives (référence +20 cm et +60 cm), qu'il reproduit à l'identique,
+   et il interpole ou extrapole pour les autres niveaux.</p>
+   <p>Il ne simule ni la durée des tempêtes, ni les brèches, ni les crues de la Dives. Hors de l'emprise étudiée par le
+   PPRL, il revient à une simple projection du niveau marin sur le relief (majorante).</p>
+   <p><b>Le PPRL reste la seule référence réglementaire.</b></p></div>
+  <div class="bloc"><details open><summary>Méthode, calage et sources</summary><div class="note" id="methode"></div></details></div>
+  <div class="bloc wms"><details><summary>Couches WMS complémentaires</summary>
+   <div class="note" style="margin:6px 0">Ajouter un flux WMS (ex. zonages Géorisques…) : adresse du service et nom de
+    la couche, tels qu'affichés dans QGIS. Les couches ajoutées sont mémorisées dans ce navigateur (vue 2D).</div>
+   <input id="wUrl" placeholder="https://…/wms">
+   <input id="wCouche" placeholder="nom de la couche">
+   <input id="wNom" placeholder="libellé (facultatif)">
+   <button id="wAjout" style="margin-top:4px">Ajouter</button><div id="wListe"></div>
+  </details></div>
+ </div>
+</aside>
+<main><div id="zone"><div id="carte"></div><div id="carte3d"></div>
+  <div id="vueSeg" class="flottant" title="Passer de la carte à plat à la vue en relief, et inversement. Les résultats sont les mêmes.">
+   <button id="btVue2d" class="actif">Carte 2D</button><button id="btVue3d">Relief 3D</button></div>
+  <div id="avert3d" class="flottant"><b>Vue 3D : une représentation, pas une simulation.</b><span class="det3d"> Les couleurs de submersion du modèle
+   (cellules de 10 m) sont posées sur le relief ; les chiffres sont exactement ceux de la vue 2D.</span></div>
+  <div id="niveauBox" class="flottant">
+   <div class="nivHaut">
+    <div class="niveau"><span class="lbl">Niveau marin à la côte</span><b id="vNiv">–</b><span>m NGF</span></div>
+    <div class="pas"><button id="moins" title="Baisser de 10 cm">− 10 cm</button><button id="plus" title="Monter de 10 cm">+ 10 cm</button></div>
+    <div id="conf3d"><i></i><span id="conf3dTxt"></span></div>
+   </div>
+   <div class="piste"><input type="range" id="curseur" min="0" step="1" value="0" aria-label="Niveau marin à la côte"><div id="reperes"><div id="bandePprl"></div></div></div>
+   <div class="puces">
+    <div class="grp" id="evts"><span class="t">Événement</span>
+     <button data-v="4.15" title="Niveau atteint lors de la tempête Xynthia (2010), période de retour 1 à 5 ans">Xynthia 4,15</button>
+     <button data-v="4.6" title="Événement fréquent du TRI : période de retour 20 ans">20 ans 4,60</button>
+     <button data-v="4.9" title="Événement moyen du TRI et du PPRL : période de retour 100 ans">Centennal 4,90</button>
+     <button data-v="8.2" title="Événement extrême du TRI (8,21 m) : plus haute mer astronomique + surcote millénale + houle">Extrême 8,20</button></div>
+    <div class="grp" id="elevs"><span class="t">Hausse de la mer</span>
+     <button data-v="0">aucune</button><button data-v="0.2" title="Hypothèse du scénario de référence du PPRL">+ 20 cm</button>
+     <button data-v="0.6" title="Hypothèse du PPRL à échéance 100 ans">+ 60 cm</button><button data-v="1">+ 1 m</button></div>
+   </div>
+  </div>
   <div id="chargement">Préparation de la carte…</div></div>
  <div id="tableau"><table id="tab"></table></div>
  <div id="barre"><span id="bInfo" class="stat">Cliquez sur la carte pour connaître l'altitude, le seuil d'inondation et le classement PPRL d'un point.</span></div>
@@ -197,6 +271,17 @@ const M = D.modele, L20 = M.L20, L60 = M.L60, LX = M.LX, EP = M.echelleP, PAS = 
 const AIRE_HA = G.res*G.res/1e4, HAUT = 65535;
 const fr = (v,d=0) => v==null||isNaN(v) ? "–" : v.toLocaleString("fr-FR",{minimumFractionDigits:d,maximumFractionDigits:d});
 document.getElementById("sousTitre").textContent = D.titre + " · v" + D.version + " du " + D.date.slice(0,10);
+// ---------- onglets du panneau latéral (Résultats, Couches, À propos) ----------
+const boutonsOnglets = document.querySelectorAll("nav.onglets button");
+function ouvrirOnglet(o){
+  boutonsOnglets.forEach(b => b.classList.toggle("actif", b.dataset.o === o));
+  document.querySelectorAll(".panneau").forEach(p => p.classList.toggle("actif", p.id === "p-" + o));
+}
+boutonsOnglets.forEach(b => b.onclick = () => ouvrirOnglet(b.dataset.o));
+document.getElementById("lienInfo").onclick = ev => { ev.preventDefault(); ouvrirOnglet("info"); };
+// les contrôles de carte du bas (échelle, attribution) restent au-dessus de la barre du niveau marin
+const boiteNiveau = document.getElementById("niveauBox"), elZone = document.getElementById("zone");
+new ResizeObserver(() => elZone.style.setProperty("--hbar", (boiteNiveau.offsetHeight + 22) + "px")).observe(boiteNiveau);
 
 async function decoder(id, Type){
   const b64 = document.getElementById(id).textContent.trim();
@@ -280,12 +365,38 @@ function creerImage(){
   return {cv, ctx, img, px:new Uint32Array(img.data.buffer)};
 }
 // VUE 2D : pose une image sur la carte Leaflet
-const poserImage = (image, opacite) => new CanvasOverlay(image.cv, bornes, {className:"grille", opacity:opacite, interactive:false});
+// (classe « grille » : pixels nets ; sans elle, le navigateur adoucit les bords des cellules)
+const poserImage = (image, opacite, nette) => new CanvasOverlay(image.cv, bornes, {className:nette ? "grille" : "", opacity:opacite, interactive:false});
 const eau = creerImage();
-const coucheEau = poserImage(eau, .8).addTo(carte);
-const PX = eau.px;
+const coucheEau = poserImage(eau, .8, false).addTo(carte);
+// Deux images pour l'eau :
+//  - PX, image de CONTRÔLE (4 classes de hauteur, jamais affichée) : c'est elle que résume empreinte(),
+//    ce qui garde les empreintes de référence (tests/empreintes_reference.json) indépendantes du style d'affichage ;
+//  - AF, image AFFICHÉE (le canvas « eau », partagé par les vues 2D et 3D) : dégradé continu selon la hauteur d'eau.
+const PX = new Uint32Array(N), AF = eau.px;
 const COUL = {p1:rgba(158,202,225,255), p2:rgba(66,146,198,255), p3:rgba(33,102,172,255), p4:rgba(8,48,107,255),
               hach:rgba(214,233,246,255), bas:rgba(244,162,89,230), mer:rgba(184,224,245,255)};
+// AFFICHAGE : couleur de l'eau pour une hauteur de 0 à 3 m (au cm près), avec sa transparence :
+// l'eau peu profonde laisse davantage voir le terrain que l'eau profonde.
+const ARRETS_EAU = [[0,[196,232,247],.42],[50,[118,188,229],.56],[100,[52,131,204],.70],[200,[22,78,160],.82],[300,[8,42,110],.90]];
+function teinteEau(cm){
+  let k = 1; while (k < ARRETS_EAU.length-1 && cm > ARRETS_EAU[k][0]) k++;
+  const [c0, r0, a0] = ARRETS_EAU[k-1], [c1, r1, a1] = ARRETS_EAU[k], f = Math.max(0, Math.min(1, (cm-c0)/(c1-c0)));
+  return [0,1,2].map(j => Math.round(r0[j] + (r1[j]-r0[j])*f)).concat(a0 + (a1-a0)*f);
+}
+const PAL_EAU = new Uint32Array(301), PAL_RAYE = new Uint32Array(301);   // eau, et rayures plus claires (projection statique)
+for (let cm=0; cm<=300; cm++){
+  const [r,g,b,a] = teinteEau(cm), cl = v => Math.round(v + (255-v)*.55);
+  PAL_EAU[cm] = rgba(r, g, b, Math.round(a*255)); PAL_RAYE[cm] = rgba(cl(r), cl(g), cl(b), Math.round(a*.75*255));
+}
+const AFF = {bas:rgba(244,162,89,125), mer:rgba(184,224,245,140)};
+// légende : la même table de couleurs, donc toujours conforme à la carte
+(function(){
+  const pts = []; for (let cm=0; cm<=300; cm+=25){ const [r,g,b,a] = teinteEau(cm); pts.push(`rgba(${r},${g},${b},${a.toFixed(2)}) ${(cm/3).toFixed(1)}%`); }
+  document.querySelector("#legEau .barreEau").style.background = `linear-gradient(to right, ${pts.join(",")})`;
+  document.querySelector("#legEau .grad").innerHTML = [[0,"0"],[50,"0,5"],[100,"1"],[200,"2"],[300,"3 m et +"]]
+    .map(([cm, t]) => `<span style="left:${cm/3}%">${t}</span>`).join("");
+})();
 
 // ---------- statistiques précalculées (une seule lecture des grilles) ----------
 const NC = D.communes.length, LG = NL+1;
@@ -307,6 +418,17 @@ const somme = (h, t) => { let s=0; for (let c=1;c<=NC;c++) s+=h[c*LG+t]; return 
 // ---------- état (commun à toutes les vues) ----------
 const curseur = document.getElementById("curseur");
 curseur.max = NL-1;
+// repères sous le curseur : mètres entiers (cliquables) et bande des deux scénarios du PPRL.
+// Le décalage en pixels tient compte de la largeur de la poignée du curseur (≈ 16 px).
+const posCurseur = v => { const p = (v-NIV[0])/(NIV[NL-1]-NIV[0])*100; return `calc(${p.toFixed(3)}% + ${(8 - p*.16).toFixed(1)}px)`; };
+const elReperes = document.getElementById("reperes");
+for (let v=Math.ceil(NIV[0]); v<=NIV[NL-1]; v++){
+  const s = document.createElement("span"); s.textContent = v + " m"; s.style.left = posCurseur(v);
+  s.onclick = () => { idx = idxNiv(v); planifier(); }; elReperes.append(s);
+}
+const bandePprl = document.getElementById("bandePprl"), fPprl = (L60-L20)/(NIV[NL-1]-NIV[0]);
+bandePprl.style.left = posCurseur(L20); bandePprl.style.width = `calc(${(fPprl*100).toFixed(3)}% - ${(fPprl*16).toFixed(1)}px)`;
+bandePprl.title = "Scénarios modélisés du PPRL : 5,10 et 5,50 m NGF";
 let idx = idxNiv(L20), evt = 4.9, elev = 0.2;           // niveau marin choisi (rang dans NIV), événement, élévation
 let basHa = 0, basParCom = new Float64Array(NC+1), batFort = 0;   // résultats du dernier calcul
 const etatBat = new Uint8Array(NB);                     // par bâtiment : 0 hors d'eau, 1 touché, 2 plus d'1 m d'eau, 3 sous le niveau marin non atteint
@@ -318,17 +440,19 @@ function calculer(){
   const terr = opt("oTerr"), aBas = opt("oBas"), aMer = opt("oMer"), aEau = opt("oEau");
   basParCom.fill(0);
   for (let i=0;i<N;i++){
-    const tt = T[i]; let col = 0;
-    if (terr && C[i]===0 && tt!==0){ PX[i]=0; continue; }
-    if (tt===0) col = aMer ? COUL.mer : 0;
+    const tt = T[i]; let col = 0, aff = 0;               // col : image de contrôle ; aff : image affichée
+    if (terr && C[i]===0 && tt!==0){ PX[i]=0; AF[i]=0; continue; }
+    if (tt===0){ if (aMer){ col = COUL.mer; aff = AFF.mer; } }
     else if (tt<=t){
       if (aEau){
         const d = lc - Z[i] - ca*P20[i] - cb*P60[i];        // hauteur d'eau (cm)
         col = d<50?COUL.p1 : d<100?COUL.p2 : d<200?COUL.p3 : COUL.p4;
-        if (((K[i]>>9)&3)===2){ const x = i%NX, y = (i/NX)|0; if (((x+y)&3)===0) col = COUL.hach; }
+        const cm = d<0 ? 0 : d>300 ? 300 : d|0;
+        aff = PAL_EAU[cm];
+        if (((K[i]>>9)&3)===2){ const x = i%NX, y = (i/NX)|0; if (((x+y)&3)===0) col = COUL.hach; if ((((x+y)>>1)&3)===0) aff = PAL_RAYE[cm]; }
       }
-    } else { const z=Z[i]; if (z>0 && z<lc){ basParCom[C[i]]++; if (aBas) col = COUL.bas; } }
-    PX[i] = col;
+    } else { const z=Z[i]; if (z>0 && z<lc){ basParCom[C[i]]++; if (aBas){ col = COUL.bas; aff = AFF.bas; } } }
+    PX[i] = col; AF[i] = aff;
   }
   eau.ctx.putImageData(eau.img, 0, 0);
   basHa = 0; for (let c=1;c<=NC;c++) basHa += basParCom[c]*AIRE_HA;
@@ -379,9 +503,9 @@ function majTexte(){
   const [cl, tx] = etatNiveau(Lm), el = document.getElementById("etat");
   el.className = "etat " + cl; document.getElementById("etatTxt").textContent = tx;
   // le même niveau de confiance, en version courte, reste affiché dans le bandeau de la vue 3D
-  document.getElementById("conf3d").className = "etat " + cl;
-  document.getElementById("conf3dTxt").textContent = fr(Lm,2) + " m NGF : " + {ok:"niveau calé sur le PPRL, ou sous le niveau de protection des digues.",
-    moy:"niveau interpolé ou extrapolé près des scénarios du PPRL.", bas:"au-delà des scénarios du PPRL, ordre de grandeur seulement."}[cl];
+  const conf = document.getElementById("conf3d");
+  conf.className = cl; conf.title = tx;
+  document.getElementById("conf3dTxt").textContent = {ok:"Résultat calé", moy:"Interpolé / extrapolé", bas:"Ordre de grandeur"}[cl];
   const proche = (a,b) => Math.abs(a-b) < PAS/2;
   const combi = proche(Lm, NIV[idxNiv(evt+elev)]);
   document.querySelectorAll("#evts button").forEach(b => b.classList.toggle("actif", combi && proche(+b.dataset.v, evt)));
@@ -423,7 +547,7 @@ const boitesCom = {};
 coucheCom.eachLayer(l => boitesCom[l.feature.properties.i] = l.getBounds());
 
 // ---------- couches du PPRL ----------
-const pprl = creerImage(), couchePprl = poserImage(pprl, .65);
+const pprl = creerImage(), couchePprl = poserImage(pprl, .65, true);
 const PAL_ALEA = [0, rgba(255,224,138,255), rgba(253,174,97,255), rgba(227,74,51,255), rgba(122,1,119,255)];
 const PAL_ZONE = [0, rgba(215,25,28,255), rgba(245,138,31,255), rgba(241,224,90,255), rgba(43,108,176,255), rgba(127,179,230,255), rgba(90,174,97,255)];
 const hex = c => "#" + [c&255, (c>>8)&255, (c>>16)&255].map(v => v.toString(16).padStart(2,"0")).join("");
@@ -578,8 +702,14 @@ document.querySelectorAll("#evts button").forEach(b => b.onclick = () => { evt =
 document.querySelectorAll("#elevs button").forEach(b => b.onclick = () => { elev = +b.dataset.v; idx = idxNiv(evt+elev); planifier(); });
 ["oBas","oTerr","oMer","oBat","oEau"].forEach(id => document.getElementById(id).onchange = planifier);
 bascule("oCom", coucheCom);
-document.getElementById("opa").oninput = e => { coucheEau.setOpacity(e.target.value/100);
-  if (carte3d) carte3d.setPaintProperty("eau", "raster-opacity", e.target.value/100); };
+// opacité de l'eau : une valeur par vue, l'eau étant plus transparente en 3D pour laisser voir le terrain
+const opaVue = {"2D":80, "3D":60}, elOpa = document.getElementById("opa");
+function appliquerOpacite(){
+  const v = opaVue[vue]; elOpa.value = v; document.getElementById("vOpa").textContent = v + " %";
+  if (vue === "2D") coucheEau.setOpacity(v/100);
+  else if (carte3d && carte3d.getLayer("eau")) carte3d.setPaintProperty("eau", "raster-opacity", v/100);
+}
+elOpa.oninput = e => { opaVue[vue] = +e.target.value; appliquerOpacite(); };
 
 // =====================================================================================================
 // VUE 3D (MapLibre GL JS)
@@ -611,8 +741,11 @@ async function creerCarte3d(centre, zoom){
   if (!volumes){ choixBat.querySelector('[value="volumes"]').disabled = true; if (choixBat.value === "volumes") choixBat.value = "points"; }
   const sources = {
     plan:  {type:"raster", tiles:[tuilesIgn("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2","png")], tileSize:256, maxzoom:18, attribution:"© IGN / Géoplateforme"},
-    ortho: {type:"raster", tiles:[tuilesIgn("ORTHOIMAGERY.ORTHOPHOTOS","jpeg")], tileSize:256, maxzoom:19}};
-  const couches = [{id:"plan", type:"raster", source:"plan"}, {id:"ortho", type:"raster", source:"ortho", layout:{visibility:"none"}}];
+    ortho: {type:"raster", tiles:[tuilesIgn("ORTHOIMAGERY.ORTHOPHOTOS","jpeg")], tileSize:256, maxzoom:19, attribution:"© IGN / Géoplateforme"}};
+  // fond choisi dans la liste « Fond » (photo aérienne par défaut)
+  const fondChoisi = document.getElementById("fond3d").value;
+  const couches = [{id:"plan", type:"raster", source:"plan", layout:{visibility:fondChoisi === "plan" ? "visible" : "none"}},
+                   {id:"ortho", type:"raster", source:"ortho", layout:{visibility:fondChoisi === "ortho" ? "visible" : "none"}}];
   if (mnt){
     const dem = {type:"raster-dem", tiles:[new URL("tuiles/mnt/", location.href).href + "{z}/{x}/{y}.png"], encoding:mnt.encodage,
                  tileSize:mnt.tuile, minzoom:mnt.zmin, maxzoom:mnt.zmax, bounds:mnt.emprise, attribution:"Relief : MNT LiDAR HD © IGN"};
@@ -633,11 +766,11 @@ async function creerCarte3d(centre, zoom){
   // l'image des hauteurs d'eau : le même canvas que la vue 2D, étiré entre les quatre coins de la grille
   carte3d.addSource("eau", {type:"canvas", canvas:eau.cv, coordinates:COINS, animate:false});
   carte3d.addLayer({id:"eau", type:"raster", source:"eau",
-    paint:{"raster-opacity":document.getElementById("opa").value/100, "raster-resampling":"nearest", "raster-fade-duration":0}});
+    paint:{"raster-opacity":opaVue["3D"]/100, "raster-resampling":"linear", "raster-fade-duration":0}});
   // l'image de comparaison au PPRL (aléa ou zonage), masquée tant qu'aucune couche n'est choisie
   carte3d.addSource("pprl", {type:"canvas", canvas:pprl.cv, coordinates:COINS, animate:false});
   carte3d.addLayer({id:"pprl", type:"raster", source:"pprl", layout:{visibility:"none"},
-    paint:{"raster-opacity":.65, "raster-resampling":"nearest", "raster-fade-duration":0}});
+    paint:{"raster-opacity":.5, "raster-resampling":"linear", "raster-fade-duration":0}});
   // les couches vectorielles : mêmes données et mêmes couleurs que dans la vue 2D
   const geo = donnees => ({type:"geojson", data:donnees});
   const points = (liste, lon, lat) => ({type:"FeatureCollection", features:liste.map((p,k) =>
@@ -654,8 +787,8 @@ async function creerCarte3d(centre, zoom){
   ptsBat.features.forEach((f,j) => f.properties.v = aVolume[j]);      // v = 1 si le bâtiment a aussi une emprise (un volume)
   carte3d.addSource("batiments", {type:"geojson", generateId:true, data:ptsBat});
   if (volumes) carte3d.addSource("volumes", geo(volumes));
-  carte3d.addLayer({id:"bande", type:"fill", source:"bande", paint:{"fill-color":"#7a0177", "fill-opacity":.35}});
-  carte3d.addLayer({id:"recul", type:"fill", source:"recul", paint:{"fill-color":"#bf812d", "fill-opacity":.5}});
+  carte3d.addLayer({id:"bande", type:"fill", source:"bande", paint:{"fill-color":"#7a0177", "fill-opacity":.25}});
+  carte3d.addLayer({id:"recul", type:"fill", source:"recul", paint:{"fill-color":"#bf812d", "fill-opacity":.35}});
   carte3d.addLayer({id:"communes", type:"line", source:"communes", paint:{"line-color":"#B91E27", "line-width":1.2, "line-opacity":.8}});
   carte3d.addLayer({id:"emprise", type:"line", source:"emprise", paint:{"line-color":"#666", "line-width":1, "line-dasharray":[3,4]}});
   carte3d.addLayer({id:"perimetre", type:"line", source:"perimetre", paint:{"line-color":"#222", "line-width":1.8, "line-dasharray":[3,2]}});
@@ -771,9 +904,8 @@ async function basculerVue(){
     if (vue === "2D"){
       const c = carte.getCenter(), z = carte.getZoom()-1;        // MapLibre compte les zooms avec 1 de moins que Leaflet
       elCarte.style.display = "none"; elCarte3d.style.display = "block";
-      if (!carte3d){ document.getElementById("btVue").textContent = "Chargement de la vue 3D…"; await creerCarte3d(c, z);
-        if (elCarte3d.clientWidth < 700) document.getElementById("plier3d").click();   // petit écran : bandeau réduit au départ
-      } else { carte3d.resize(); carte3d.jumpTo({center:[c.lng, c.lat], zoom:z}); }
+      if (!carte3d){ document.getElementById("btVue3d").textContent = "Chargement…"; await creerCarte3d(c, z); }
+      else { carte3d.resize(); carte3d.jumpTo({center:[c.lng, c.lat], zoom:z}); }
       vue = "3D"; rafraichir3D();
       if (z + 1 < 14) carte3d.flyTo(Object.assign({duration:3000, essential:true}, VUE_ESTUAIRE));
     } else {
@@ -782,14 +914,20 @@ async function basculerVue(){
       carte.invalidateSize(); carte.setView([c.lat, c.lng], z, {animate:false});
       vue = "2D";
     }
-    document.getElementById("btVue").textContent = vue === "2D" ? "Vue 3D" : "Vue 2D";
-    document.getElementById("bandeau3d").style.display = vue === "3D" ? "block" : "none";
-  } finally { basculeEnCours = false; }
+    majCommandesVue();
+  } finally { basculeEnCours = false; document.getElementById("btVue3d").textContent = "Relief 3D"; }
 }
-document.getElementById("btVue").onclick = basculerVue;
-document.getElementById("plier3d").onclick = ev => { ev.preventDefault();
-  const d = document.getElementById("detail3d"), plie = d.style.display !== "none";
-  d.style.display = plie ? "none" : "block"; ev.target.textContent = plie ? "détails et réglages" : "réduire"; };
+// bouton double 2D | 3D, avertissement de la vue 3D, réglages 3D actifs ou grisés, opacité propre à chaque vue
+function majCommandesVue(){
+  document.getElementById("btVue2d").classList.toggle("actif", vue === "2D");
+  document.getElementById("btVue3d").classList.toggle("actif", vue === "3D");
+  document.getElementById("avert3d").style.display = vue === "3D" ? "block" : "none";
+  document.getElementById("bloc3d").classList.toggle("inactif", vue !== "3D");
+  appliquerOpacite();
+}
+document.getElementById("btVue2d").onclick = () => { if (vue !== "2D") basculerVue(); };
+document.getElementById("btVue3d").onclick = () => { if (vue !== "3D") basculerVue(); };
+document.getElementById("btVers3d").onclick = () => { if (vue !== "3D") basculerVue(); };
 document.getElementById("exag").oninput = e => { exag = +e.target.value; document.getElementById("vExag").textContent = exag;
   if (carte3d && reliefDispo) carte3d.setTerrain({source:"relief", exaggeration:exag});
   if (carte3d && carte3d.getLayer("volumes")) carte3d.setPaintProperty("volumes", "fill-extrusion-height", hauteurVolumes());
@@ -872,6 +1010,9 @@ document.getElementById("methode").innerHTML = `
 <p><b>Limites.</b> Ni durée de l'événement, ni brèche simulée, ni débit de la Dives, ni ouvrages hydrauliques autres que ceux
  implicitement pris en compte par le PPRL. Entre et au-delà des scénarios du PPRL, les résultats sont des ordres de grandeur.
  Précision verticale du relief : 10 à 20 cm. Un bâtiment est compté s'il a son centre dans une cellule en eau.</p>
+<p><b>Affichage de l'eau.</b> Les hauteurs d'eau sont dessinées en dégradé continu (de plus en plus foncé et opaque avec la
+ hauteur) et les bords des cellules sont adoucis à l'affichage. Les calculs, eux, restent faits sur les cellules de 10 m, et le
+ contrôle des résultats (GEMAPI.verifier()) porte sur l'image en 4 classes de hauteur.</p>
 <p><b>Vue 3D.</b> La vue 3D est une représentation cartographique : elle pose sur un relief l'image des hauteurs d'eau calculée
  par le modèle, la même que celle de la vue 2D. Elle ne calcule rien et ne simule aucune surface d'eau ; les indicateurs, la courbe
  et le tableau sont identiques dans les deux vues (contrôle : GEMAPI.verifierVues() dans la console du navigateur).
