@@ -72,9 +72,9 @@ label.sw input:focus-visible{outline:2px solid var(--rouge);outline-offset:2px}
 .leg i.rond{border-radius:50%;flex:0 0 11px;width:11px;height:11px}
 .leg i.hach{background:repeating-linear-gradient(45deg,#6fa8d6 0 3px,#dbeaf6 3px 7px)}
 .leg i.trait{height:0;border:0;border-top:2px dashed #333;border-radius:0}
-#legEau .barreEau{height:14px;border-radius:7px;border:1px solid rgba(0,0,0,.08)}
-#legEau .grad{position:relative;height:16px;margin:3px 7px 4px;font-size:11px;color:var(--mut)}
-#legEau .grad span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.legEauBox .barreEau{height:14px;border-radius:7px;border:1px solid rgba(0,0,0,.08)}
+.legEauBox .grad{position:relative;height:16px;margin:3px 7px 4px;font-size:11px;color:var(--mut)}
+.legEauBox .grad span{position:absolute;transform:translateX(-50%);white-space:nowrap}
 .note{font-size:12px;color:var(--mut);line-height:1.4}
 .note p{margin:6px 0}.note table{border-collapse:collapse;margin:4px 0}.note td,.note th{border:1px solid var(--bord);padding:2px 5px;text-align:right;font-size:11.5px}
 .note td:first-child,.note th:first-child{text-align:left}
@@ -90,6 +90,10 @@ details summary{cursor:pointer;font-size:13px;font-weight:700}
 #vueSeg button{white-space:nowrap;border:0;border-radius:999px;padding:6px 16px;font-weight:700;font-size:13.5px;background:none;color:var(--mut)}
 #vueSeg button:hover{color:var(--txt)}#vueSeg button.actif{background:var(--rouge);color:#fff}
 #avert3d{display:none;top:58px;right:12px;max-width:290px;padding:8px 12px;font-size:12px;line-height:1.35;border-left:4px solid var(--rouge)}
+#legCarte{top:58px;left:54px;max-width:250px;padding:6px 12px;font-size:12px}
+#legCarte summary{cursor:pointer;font-weight:700;font-size:12.5px;list-style-position:inside}
+#legCarte[open] summary{margin-bottom:4px}
+#legCarte .leg{font-size:12px;margin:4px 0}
 #niveauBox{left:50%;bottom:14px;transform:translateX(-50%);width:min(800px,calc(100% - 24px));padding:10px 16px 10px}
 .nivHaut{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .niveau{display:flex;align-items:baseline;gap:5px}
@@ -132,6 +136,7 @@ details summary{cursor:pointer;font-size:13px;font-weight:700}
  #niveauBox{bottom:8px;padding:8px 10px}.niveau .lbl{display:none}.niveau b{font-size:24px;min-width:56px}
  .puces{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}.grp{flex-wrap:nowrap}.grp button{white-space:nowrap}
  #avert3d{left:12px;right:auto}.det3d{display:none}
+ #legCarte{left:auto;right:12px}
 }
 </style></head><body>
 <div id="app">
@@ -196,7 +201,7 @@ details summary{cursor:pointer;font-size:13px;font-weight:700}
    </div>
   </div>
   <div class="bloc"><h2>Légende</h2>
-   <div id="legEau"><div class="note" style="margin-bottom:5px">Hauteur d'eau estimée</div><div class="barreEau"></div><div class="grad"></div></div>
+   <div id="legEau" class="legEauBox"><div class="note" style="margin-bottom:5px">Hauteur d'eau estimée</div><div class="barreEau"></div><div class="grad"></div></div>
    <div class="leg"><i class="hach"></i>rayé : hors emprise PPRL, projection statique (majorante)</div>
    <div class="leg"><i style="background:#f4a259;opacity:.6"></i>sous le niveau marin mais non atteint (digues, éloignement) : sensible en cas de brèche ou de remontée de nappe</div>
    <div class="leg"><i style="background:#b8e0f5"></i>mer détectée (si affichée)</div>
@@ -232,6 +237,13 @@ details summary{cursor:pointer;font-size:13px;font-weight:700}
    <button id="btVue2d" class="actif">Carte 2D</button><button id="btVue3d">Relief 3D</button></div>
   <div id="avert3d" class="flottant"><b>Vue 3D : une représentation, pas une simulation.</b><span class="det3d"> Les couleurs de submersion du modèle
    (cellules de 10 m) sont posées sur le relief ; les chiffres sont exactement ceux de la vue 2D.</span></div>
+  <details id="legCarte" class="flottant"><summary>Légende</summary>
+   <div class="legEauBox"><div class="note" style="margin-bottom:3px">Hauteur d'eau estimée</div><div class="barreEau"></div><div class="grad"></div></div>
+   <div class="leg"><i style="background:#f4a259;opacity:.6"></i>sous le niveau marin mais non atteint (digues, éloignement) : sensible en cas de brèche ou de remontée de nappe</div>
+   <div class="leg"><i class="rond" style="background:#B91E27"></i>bâtiment touché</div>
+   <div class="leg"><i class="rond" style="background:#5c0a10"></i>bâtiment avec plus d'1 m d'eau</div>
+   <div class="leg"><i class="rond" style="background:#f4a259"></i>bâtiment sous le niveau marin, non atteint</div>
+  </details>
   <div id="niveauBox" class="flottant">
    <div class="nivHaut">
     <div class="niveau"><span class="lbl">Niveau marin à la côte</span><b id="vNiv">–</b><span>m NGF</span></div>
@@ -393,9 +405,12 @@ const AFF = {bas:rgba(244,162,89,125), mer:rgba(184,224,245,140)};
 // légende : la même table de couleurs, donc toujours conforme à la carte
 (function(){
   const pts = []; for (let cm=0; cm<=300; cm+=25){ const [r,g,b,a] = teinteEau(cm); pts.push(`rgba(${r},${g},${b},${a.toFixed(2)}) ${(cm/3).toFixed(1)}%`); }
-  document.querySelector("#legEau .barreEau").style.background = `linear-gradient(to right, ${pts.join(",")})`;
-  document.querySelector("#legEau .grad").innerHTML = [[0,"0"],[50,"0,5"],[100,"1"],[200,"2"],[300,"3 m et +"]]
+  const fond = `linear-gradient(to right, ${pts.join(",")})`, graduations = [[0,"0"],[50,"0,5"],[100,"1"],[200,"2"],[300,"3 m et +"]]
     .map(([cm, t]) => `<span style="left:${cm/3}%">${t}</span>`).join("");
+  // deux légendes : celle de l'onglet Couches et celle, repliable, posée sur la carte (ouverte d'office sur grand écran)
+  document.querySelectorAll(".legEauBox .barreEau").forEach(e => e.style.background = fond);
+  document.querySelectorAll(".legEauBox .grad").forEach(e => e.innerHTML = graduations);
+  if (window.innerWidth > 860) document.getElementById("legCarte").open = true;
 })();
 
 // ---------- statistiques précalculées (une seule lecture des grilles) ----------
