@@ -94,6 +94,7 @@ details summary{cursor:pointer;font-size:13px;font-weight:700}
 #encartCarte summary{cursor:pointer;font-weight:700;font-size:12.5px;list-style-position:inside}
 #encartCarte details[open] summary{margin-bottom:4px}
 #legCarte .leg{font-size:12px;margin:4px 0}
+#swBas{font-size:12px;margin:6px 0 2px;border-top:1px solid var(--bord);padding-top:6px}
 #avert3d{display:none;border-top:1px solid var(--bord);margin-top:6px;padding-top:5px}
 #avert3d summary{color:var(--rouge);font-size:12px}
 #niveauBox{left:50%;bottom:14px;transform:translateX(-50%);width:min(800px,calc(100% - 24px));padding:10px 16px 10px}
@@ -165,7 +166,6 @@ details summary{cursor:pointer;font-size:13px;font-weight:700}
  <div class="panneau" id="p-couches">
   <div class="bloc"><h2>Affichage</h2>
    <label class="sw"><input type="checkbox" id="oEau" checked> Hauteurs d'eau estimées</label>
-   <label class="sw"><input type="checkbox" id="oBas" checked> Terrains sous le niveau marin non atteints</label>
    <label class="sw"><input type="checkbox" id="oBat" checked> Bâtiments touchés</label>
    <label class="sw"><input type="checkbox" id="oPiezo"> Piézomètres (nappes)</label>
    <label class="sw"><input type="checkbox" id="oCom" checked> Limites communales</label>
@@ -243,6 +243,7 @@ details summary{cursor:pointer;font-size:13px;font-weight:700}
    <div class="leg"><i class="rond" style="background:#5c0a10"></i>bâtiment avec plus d'1 m d'eau</div>
    <div class="leg"><i class="rond" style="background:#f4a259"></i>bâtiment sous le niveau marin, non atteint</div>
   </details>
+  <label class="sw" id="swBas"><input type="checkbox" id="oBas"> Terrains sous le niveau marin non atteints</label>
   <details id="avert3d"><summary>Vue 3D : une représentation, pas une simulation</summary>
    Les couleurs de submersion du modèle (cellules de 10 m) sont posées sur le relief ; les chiffres sont exactement ceux de la vue 2D.</details>
   </div>
@@ -1075,7 +1076,12 @@ function relever(){
   return {modele:D.date, options:["oEau","oBas","oTerr","oMer"].filter(opt), empreintes:liste};
 }
 async function verifier(){
-  const ref = await (await fetch("tests/empreintes_reference.json", {cache:"no-store"})).json(), act = relever(), ecarts = [];
+  const ref = await (await fetch("tests/empreintes_reference.json", {cache:"no-store"})).json(), ecarts = [];
+  // le contrôle se fait avec les options d'affichage de la référence, puis on remet celles de l'utilisateur
+  const ids = ["oEau","oBas","oTerr","oMer"], avant = ids.map(opt);
+  ids.forEach(id => document.getElementById(id).checked = ref.options.includes(id));
+  const act = relever();
+  ids.forEach((id, k) => document.getElementById(id).checked = avant[k]); planifier();
   if (ref.modele !== act.modele) ecarts.push(`modèle du ${act.modele}, référence établie pour celui du ${ref.modele}`);
   if (ref.options.join() !== act.options.join()) ecarts.push("options d'affichage différentes de celles de la référence (" + ref.options.join(", ") + ")");
   ref.empreintes.forEach((r,k) => { const a = act.empreintes[k];
