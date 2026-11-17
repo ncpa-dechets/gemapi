@@ -139,15 +139,21 @@ window.BatimentsDetail = (function(){
       v_coul = u_coul[int(a_etat + 0.5)] * v_lum;
       v_toit = n.z > 0.35 ? 1.0 : 0.0;                                     // face tournée vers le ciel = toit
       v_touche = a_etat > 0.5 ? 1.0 : 0.0;
-      v_uv = vec2(u_uv.x + a_pos.x*u_uv.y, u_uv.z + a_pos.y*u_uv.w);       // position du sommet dans l'orthophoto de la tuile
+      v_uv = vec2(u_uv.x + a_pos.x*u_uv.y, u_uv.z + a_pos.y*u_uv.w);       // position du sommet dans l'orthophoto (0 à 1)
     }`;
+  // précision maximale quand elle existe : en « mediump » (1 pour 1000), la position dans une photo de 3 km serait fausse de 3 m
   const FRAGMENT = `
+    #ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
     precision mediump float;
+    #endif
     uniform sampler2D u_photo; uniform float u_avecPhoto;
     varying vec3 v_coul; varying vec2 v_uv; varying float v_toit; varying float v_lum; varying float v_touche;
     void main(){
       vec3 c = v_coul;
-      if (u_avecPhoto > 0.5 && v_toit > 0.5){
+      bool dansPhoto = v_uv.x >= 0.0 && v_uv.x <= 1.0 && v_uv.y >= 0.0 && v_uv.y <= 1.0;
+      if (u_avecPhoto > 0.5 && v_toit > 0.5 && dansPhoto){
         vec3 photo = texture2D(u_photo, v_uv).rgb * (0.85 + 0.15*v_lum);
         c = mix(photo, v_coul, 0.35*v_touche);                             // bâtiment touché : toit légèrement teinté
       }
@@ -155,22 +161,23 @@ window.BatimentsDetail = (function(){
     }`;
   const rvb = hex => [1,3,5].map(k => parseInt(hex.substr(k,2), 16)/255);
 
-  // ---------- 5. orthophoto d'une tuile ----------
-  // Une image de l'IGN (service WMS) qui couvre exactement l'emprise de la tuile, en Web Mercator.
-  // Taille : environ 40 cm par pixel, plafonnée à 2048 pixels de côté (puissance de 2, pour la carte graphique).
+  // ---------- 5. orthophoto drapée sur les toits ----------
+  // Une seule image de l'IGN (service WMS, Web Mercator) pour toute la vue : un carré centré sur le centre de l'écran,
+  // un peu plus grand que ce qui est affiché, rechargé quand on se déplace ou qu'on zoome.
+  // (Une image par tuile ne suffisait pas : les tuiles font jusqu'à 7 km, soit 2 à 4 m par pixel une fois plafonné
+  // à 2048 pixels, et les toits prenaient la couleur du sol voisin, ce qui donnait l'impression d'un décalage.)
+  // Taille : 20 cm par pixel (résolution de la photo IGN) tant que c'est possible, au plus 2048 pixels de côté.
   const ORTHO = "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=ORTHOIMAGERY.ORTHOPHOTOS" +
                 "&STYLES=&CRS=EPSG:3857&FORMAT=image/jpeg";
-  const DEMI = Math.PI*6378137;
-  const puissance2 = v => Math.pow(2, Math.max(7, Math.min(11, Math.round(Math.log2(v)))));
-  async function chargerPhoto(t){
-    const x0 = (mercX(t.ouest) - .5)*2*DEMI, x1 = (mercX(t.est) - .5)*2*DEMI;
-    const y0 = (.5 - mercY(t.sud))*2*DEMI, y1 = (.5 - mercY(t.nord))*2*DEMI;
-    const metres = (x1 - x0)*Math.cos((t.sud + t.nord)/2*RAD);            // largeur réelle de la tuile sur le terrain
-    const l = puissance2(metres/0.4), h = puissance2(metres/0.4*(y1 - y0)/(x1 - x0));
-    const url = ORTHO + "&BBOX=" + [x0, y0, x1, y1].map(v => v.toFixed(2)).join(",") + "&WIDTH=" + l + "&HEIGHT=" + h;
+  const DEMI = Math.PI*6378137, PIXELS_MAX = 2048;
+  // boite = [ouest, nord, est, sud] en coordonnées de carte (0 à 1, y vers le sud)
+  async function chargerPhoto(boite, pixels, signal){
+    const [mx0, my0, mx1, my1] = boite;
+    const bbox = [(mx0 - .5)*2*DEMI, (.5 - my1)*2*DEMI, (mx1 - .5)*2*DEMI, (.5 - my0)*2*DEMI];
+    const url = ORTHO + "&BBOX=" + bbox.map(v => v.toFixed(2)).join(",") + "&WIDTH=" + pixels + "&HEIGHT=" + pixels;
     // le service refuse parfois une requête quand il est très sollicité : on réessaie trois fois, en attendant de plus en plus
     for (let essai = 1; ; essai++){
-      const r = await fetch(url);
+      const r = await fetch(url, {signal});
       if (r.ok) return await createImageBitmap(await r.blob());
       if (essai >= 3) throw new Error("orthophoto indisponible (" + r.status + ")");
       await new Promise(attente => setTimeout(attente, 1500*essai));
@@ -192,8 +199,11 @@ window.BatimentsDetail = (function(){
   // le seul moment où MapLibre nous prête la carte graphique. Ailleurs, on prépare seulement les données.
   async function creer(options){
     const {tuiles, transform} = await listerTuiles(options.urlTileset);
-    const MAX_TUILES = 30, MAX_PHOTOS = 16, MAX_SIMULTANE = 3;
-    let carte = null, gl = null, prog = null, lieux = null, visible = true, enCours = 0, photosEnCours = 0, horloge = 0;
+    const MAX_TUILES = 30, MAX_SIMULTANE = 3;
+    let carte = null, gl = null, prog = null, lieux = null, visible = true, enCours = 0, horloge = 0;
+    // orthophoto de la vue : celle affichée (tex, boite, mpp = mètres par pixel), l'image reçue pas encore envoyée,
+    // et la demande en cours (qu'on abandonne si la vue change avant la réponse)
+    const photo = {tex:null, boite:null, mpp:0, image:null, boiteImage:null, mppImage:0, demande:null};
 
     function compiler(type, source){
       const s = gl.createShader(type); gl.shaderSource(s, source); gl.compileShader(s);
@@ -228,26 +238,52 @@ window.BatimentsDetail = (function(){
       const rangs = t.rang;
       if (options.surChange) setTimeout(() => options.surChange(rangs, true), 0);
     }
-    async function photo(t){
-      t.photo = "chargement"; photosEnCours++;
-      try { t.image = await chargerPhoto(t); t.photo = "image"; carte.triggerRepaint(); }
-      catch (err){ t.photo = "erreur"; console.warn("bâtiments détaillés :", err.message); }
-      finally { photosEnCours--; choisir(); }
+    // Photo nécessaire pour la vue actuelle : carré centré sur le centre de l'écran, de 1,5 fois la taille de l'écran
+    // (davantage quand la vue est inclinée, car on voit plus loin), entre 300 m et 3 km de côté.
+    function photoVoulue(){
+      const c = carte.getCenter(), can = carte.getCanvas();
+      const mppEcran = 40075016.686*Math.cos(c.lat*RAD)/(512*Math.pow(2, carte.getZoom()));   // mètres par pixel d'écran
+      const demi = Math.min(1500, Math.max(150, mppEcran*Math.max(can.clientWidth, can.clientHeight)*0.75*(1 + carte.getPitch()/60)));
+      const pixels = Math.min(PIXELS_MAX, Math.pow(2, Math.max(9, Math.ceil(Math.log2(2*demi/0.2)))));
+      const s = maplibregl.MercatorCoordinate.fromLngLat(c, 0).meterInMercatorCoordinateUnits();
+      const x = mercX(c.lng), y = mercY(c.lat);
+      return {boite:[x - demi*s, y - demi*s, x + demi*s, y + demi*s], pixels, mpp:2*demi/pixels,
+              ecran:[x - demi*s/1.5, y - demi*s/1.5, x + demi*s/1.5, y + demi*s/1.5]};   // partie à l'écran : doit être couverte
     }
-    function envoyerPhoto(t){                               // appelé dans render()
-      t.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t.tex);
+    // une photo convient si elle couvre l'écran et n'est pas nettement moins précise que celle qu'on demanderait
+    const convient = (boite, mpp, v) => boite && mpp < v.mpp*1.6 &&
+      boite[0] <= v.ecran[0] && boite[1] <= v.ecran[1] && boite[2] >= v.ecran[2] && boite[3] >= v.ecran[3];
+    function majPhotoVue(){
+      if (!options.photo() || carte.getZoom() < options.zoomMin) return;
+      const v = photoVoulue();
+      if (convient(photo.boiteImage || photo.boite, photo.boiteImage ? photo.mppImage : photo.mpp, v)) return;
+      if (photo.demande){ if (convient(photo.demande.boite, photo.demande.mpp, v)) return; photo.demande.arret.abort(); }
+      const demande = photo.demande = {boite:v.boite, mpp:v.mpp, arret:new AbortController()};
+      chargerPhoto(v.boite, v.pixels, demande.arret.signal).then(image => {
+        if (photo.demande !== demande || !gl){ image.close(); return; }
+        if (photo.image) photo.image.close();
+        photo.image = image; photo.boiteImage = v.boite; photo.mppImage = v.mpp;
+        carte.triggerRepaint();
+      }).catch(err => { if (err.name !== "AbortError") console.warn("bâtiments détaillés :", err.message); })
+        .finally(() => { if (photo.demande === demande) photo.demande = null; });
+    }
+    function envoyerPhoto(){                                // appelé dans render()
+      if (!photo.tex) photo.tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, photo.tex);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, t.image);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, photo.image);
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      t.image.close(); t.image = null; t.photo = "prete";
+      photo.image.close(); photo.image = null;
+      photo.boite = photo.boiteImage; photo.mpp = photo.mppImage; photo.boiteImage = null;
     }
-    function oublierPhoto(t){
-      if (t.tex) gl.deleteTexture(t.tex);
-      if (t.image) t.image.close();
-      t.tex = t.image = null; t.photo = undefined;
+    function oublierPhoto(){
+      if (photo.tex && gl) gl.deleteTexture(photo.tex);
+      if (photo.image) photo.image.close();
+      if (photo.demande) photo.demande.arret.abort();
+      photo.tex = photo.image = photo.boite = photo.boiteImage = photo.demande = null;
     }
     function liberer(t){
       if (t.etat === "pret"){
@@ -255,12 +291,11 @@ window.BatimentsDetail = (function(){
         const rangs = t.rang;
         if (options.surChange) setTimeout(() => options.surChange(rangs, false), 0);
       }
-      oublierPhoto(t);
       t.etat = undefined; t.idBat = t.rang = t.etatSommet = t.donnees = null;
     }
     const dansVue = (t, b) => t.est > b.getWest() && t.ouest < b.getEast() && t.nord > b.getSouth() && t.sud < b.getNorth();
     // charge les tuiles visibles (les plus proches du centre d'abord) et libère les plus anciennes au-delà de MAX_TUILES ;
-    // même principe pour les orthophotos, plus lourdes, limitées à MAX_PHOTOS
+    // met aussi à jour l'orthophoto de la vue
     function choisir(){
       if (!carte || !visible || carte.getZoom() < options.zoomMin) return;
       const b = carte.getBounds(), c = carte.getCenter();
@@ -268,11 +303,7 @@ window.BatimentsDetail = (function(){
       const voulues = tuiles.filter(t => dansVue(t, b)).sort((u, v) => dist(u) - dist(v));
       voulues.forEach(t => t.vu = ++horloge);
       for (const t of voulues){ if (enCours >= MAX_SIMULTANE) break; if (!t.etat) charger(t); }
-      if (options.photo()){
-        for (const t of voulues){ if (photosEnCours >= MAX_SIMULTANE) break; if (t.etat && t.etat !== "erreur" && !t.photo) photo(t); }
-        const avecPhoto = tuiles.filter(t => t.photo === "prete" || t.photo === "image").sort((u, v) => u.vu - v.vu);
-        while (avecPhoto.length > MAX_PHOTOS) oublierPhoto(avecPhoto.shift());
-      }
+      majPhotoVue();
       const chargees = tuiles.filter(t => t.etat === "pret" || t.etat === "donnees").sort((u, v) => u.vu - v.vu);
       while (chargees.length > MAX_TUILES) liberer(chargees.shift());
     }
@@ -300,8 +331,8 @@ window.BatimentsDetail = (function(){
         for (const t of tuiles){
           if (envois >= 2) { carte.triggerRepaint(); break; }
           if (t.etat === "donnees"){ envoyer(t); envois++; }
-          if (t.photo === "image"){ envoyerPhoto(t); envois++; }
         }
+        if (photo.image) envoyerPhoto();
         for (const t of tuiles) if (t.etat === "pret" && t.etatsAEnvoyer){
           gl.bindBuffer(gl.ARRAY_BUFFER, t.tEtat); gl.bufferData(gl.ARRAY_BUFFER, t.etatSommet, gl.DYNAMIC_DRAW); t.etatsAEnvoyer = false; }
         const pretes = tuiles.filter(t => t.etat === "pret");
@@ -316,7 +347,10 @@ window.BatimentsDetail = (function(){
         gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE); gl.disable(gl.STENCIL_TEST);
         gl.uniform3fv(lieux.coul, options.couleurs.flatMap(rvb));
         gl.uniform1f(lieux.ex, ex);
+        const photoPrete = avecPhoto && photo.tex !== null, P = photo.boite;
         gl.activeTexture(gl.TEXTURE0); gl.uniform1i(lieux.photo, 0);
+        gl.uniform1f(lieux.avecPhoto, photoPrete ? 1 : 0);
+        gl.bindTexture(gl.TEXTURE_2D, photoPrete ? photo.tex : null);
         [lieux.pos, lieux.nor, lieux.etat, lieux.sol].forEach(l => gl.enableVertexAttribArray(l));
         const m = new Float32Array(16);
         for (const t of pretes){
@@ -328,12 +362,8 @@ window.BatimentsDetail = (function(){
             m[12+k] = matrice[k]*t.cx + matrice[4+k]*t.cy + matrice[8+k]*tz + matrice[12+k];
           }
           gl.uniformMatrix4fv(lieux.mat, false, m);
-          // passage « mètres depuis le centre de la tuile » -> position dans son orthophoto (0 à 1)
-          const mx0 = mercX(t.ouest), mx1 = mercX(t.est), my0 = mercY(t.nord), my1 = mercY(t.sud);
-          gl.uniform4f(lieux.uv, (t.cx - mx0)/(mx1 - mx0), s/(mx1 - mx0), (t.cy - my0)/(my1 - my0), s/(my1 - my0));
-          const photoPrete = avecPhoto && t.photo === "prete";
-          gl.uniform1f(lieux.avecPhoto, photoPrete ? 1 : 0);
-          gl.bindTexture(gl.TEXTURE_2D, photoPrete ? t.tex : null);
+          // passage « mètres depuis le centre de la tuile » -> position dans l'orthophoto de la vue (0 à 1)
+          if (photoPrete) gl.uniform4f(lieux.uv, (t.cx - P[0])/(P[2] - P[0]), s/(P[2] - P[0]), (t.cy - P[1])/(P[3] - P[1]), s/(P[3] - P[1]));
           gl.bindBuffer(gl.ARRAY_BUFFER, t.tPos); gl.vertexAttribPointer(lieux.pos, 3, gl.FLOAT, false, 0, 0);
           gl.bindBuffer(gl.ARRAY_BUFFER, t.tNor); gl.vertexAttribPointer(lieux.nor, 3, gl.BYTE, true, 0, 0);
           gl.bindBuffer(gl.ARRAY_BUFFER, t.tEtat); gl.vertexAttribPointer(lieux.etat, 1, gl.UNSIGNED_BYTE, false, 0, 0);
@@ -345,7 +375,7 @@ window.BatimentsDetail = (function(){
         gl.bindTexture(gl.TEXTURE_2D, null);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null); gl.bindBuffer(gl.ARRAY_BUFFER, null);
       },
-      onRemove(){ carte.off("moveend", choisir); tuiles.forEach(t => { if (t.etat) liberer(t); }); gl = null; }
+      onRemove(){ carte.off("moveend", choisir); tuiles.forEach(t => { if (t.etat) liberer(t); }); oublierPhoto(); gl = null; }
     };
 
     return {
@@ -354,7 +384,7 @@ window.BatimentsDetail = (function(){
       majEtats(){ if (!gl) return; tuiles.forEach(t => { if (t.etatSommet) calculerEtats(t); }); carte.triggerRepaint(); },
       afficher(oui){ visible = oui; if (carte){ choisir(); carte.triggerRepaint(); } },
       // à appeler quand on coche ou décoche l'orthophoto sur les toits
-      majPhoto(){ if (!carte) return; if (!options.photo()) tuiles.forEach(oublierPhoto); choisir(); carte.triggerRepaint(); },
+      majPhoto(){ if (!carte) return; if (!options.photo()) oublierPhoto(); choisir(); carte.triggerRepaint(); },
       // contrôle : nombre de sommets dont la couleur ne correspond pas à l'état du bâtiment dans le modèle
       verifier(){
         let sommets = 0, ecarts = 0, batiments = 0;
@@ -362,7 +392,7 @@ window.BatimentsDetail = (function(){
         chargees.forEach(t => {
           batiments += t.rang.filter(j => j >= 0).length;
           for (let i=0;i<t.etatSommet.length;i++){ const j = t.rang[t.idBat[i]]; sommets++; if (t.etatSommet[i] !== (j < 0 ? 0 : options.etats[j])) ecarts++; } });
-        return {tuilesChargees:chargees.length, orthophotos:tuiles.filter(t => t.photo === "prete").length, batimentsDuModele:batiments, sommets, ecarts};
+        return {tuilesChargees:chargees.length, orthophoto_m_par_pixel:photo.tex ? +photo.mpp.toFixed(2) : null, batimentsDuModele:batiments, sommets, ecarts};
       }
     };
   }
